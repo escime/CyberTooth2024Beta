@@ -1,0 +1,37 @@
+{
+  "version": 1.0,
+  "startingPose": {
+    "position": {
+      "x": 1.3308136463165283,
+      "y": 5.5500569343566895
+    },
+    "rotation": -5.585622118043445e-26
+  },
+  "command": {
+    "type": "sequential",
+    "data": {
+      "commands": [
+        {
+          "type": "named",
+          "data": {
+            "name": "flash_purple"
+          }
+        },
+        {
+          "type": "path",
+          "data": {
+            "pathName": "TestPath"
+          }
+        },
+        {
+          "type": "named",
+          "data": {
+            "name": "default_leds"
+          }
+        }
+      ]
+    }
+  },
+  "folder": null,
+  "choreoAuto": true
+}
