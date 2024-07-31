@@ -12,7 +12,7 @@ from pathplannerlib.auto import NamedCommands, PathPlannerAuto
 from generated.tuner_constants import TunerConstants
 from telemetry import Telemetry
 
-from phoenix6 import swerve, utils
+from phoenix6 import swerve, utils, SignalLogger
 from wpimath.geometry import Pose2d, Rotation2d
 from wpimath.units import rotationsToRadians
 
@@ -20,6 +20,7 @@ from math import pi
 
 from commands.baseline import Baseline
 from commands.check_drivetrain import CheckDrivetrain
+from commands.alignment_leds import AlignmentLEDs
 
 
 class RobotContainer:
@@ -40,6 +41,9 @@ class RobotContainer:
             print("Not a simulation, logging enabled!")
             DataLogManager.start()
             DriverStation.startDataLog(DataLogManager.getLog(), True)
+
+            SignalLogger.set_path("/media/sda1/")
+            SignalLogger.start()
         else:
             print("Simulated, logging disabled.")
 
@@ -114,32 +118,18 @@ class RobotContainer:
         # button.Trigger(lambda: self.driver_controller.get_button("A") and not self.test_bindings).whileTrue(
         #     self.drivetrain.apply_request(lambda: self._brake))
 
-        # Test auto-alignment LEDs.
+        # Auto-alignment LEDs.
         button.Trigger(lambda: self.driver_controller.get_button("A") and not self.test_bindings).toggleOnTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_state("align"), self.leds),
-                ParallelCommandGroup(
-                    run(lambda: self.leds.set_misalignment(self.drivetrain.get_auto_lookahead_heading(
-                                [16.5, 5.53], 0.3), self.drivetrain.get_pose().rotation().degrees()), self.leds),
-                    self.drivetrain.apply_request(
-                        lambda: (
-                            self._hold_heading.with_velocity_x(
-                                -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
-                            .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
-                            .with_target_direction(Rotation2d.fromDegrees(180 +
-                                                                          self.drivetrain.get_auto_lookahead_heading(
-                                                                                [16.5, 5.53], 0.3)))))),
-                runOnce(lambda: self.leds.set_state("align"), self.leds)
-            ).andThen(runOnce(lambda: self.leds.set_state("align"), self.leds))  # TODO Figure out how to handle interruptions
-        )
-
-        # Point all modules in a direction
-        button.Trigger(lambda: self.driver_controller.get_button("B") and not self.test_bindings)\
-            .whileTrue(self.drivetrain.apply_request(
-                lambda: self._point.with_module_direction(
-                    Rotation2d(-self.driver_controller.get_axis("LY", 0.05),
-                               -self.driver_controller.get_axis("LX", 0.05)))
-        ))
+            ParallelCommandGroup(
+                AlignmentLEDs(self.leds, self.drivetrain),
+                self.drivetrain.apply_request(
+                    lambda: (
+                        self._hold_heading.with_velocity_x(
+                            -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
+                        .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
+                        .with_target_direction(Rotation2d.fromDegrees(180 +
+                                                                      self.drivetrain.get_auto_lookahead_heading(
+                                                                          [16.5, 5.53], 0.3)))))))
 
         # After pressing East on the D-Pad, hold that heading.
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E") and not self.test_bindings).toggleOnTrue(
@@ -159,15 +149,6 @@ class RobotContainer:
                         -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
                     .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
                     .with_target_direction(Rotation2d.fromDegrees(self.driver_controller.dir_est_ctrl("R"))))))
-
-        button.Trigger(lambda: self.driver_controller.get_button("X") and not self.test_bindings).toggleOnTrue(
-            self.drivetrain.apply_request(
-                lambda: (
-                    self._hold_heading.with_velocity_x(
-                        -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
-                    .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
-                    .with_target_direction(Rotation2d.fromDegrees(180 + self.drivetrain.get_auto_lookahead_heading(
-                        [16.5, 5.53], 0.3))))))
 
         # reset the field-centric heading on left bumper press
         button.Trigger(lambda: self.driver_controller.get_button("LB") and not self.test_bindings)\
@@ -219,6 +200,14 @@ class RobotContainer:
 
     def configureTestBindings(self) -> None:
         self.configureSYSID()
+
+        # Point all modules in a direction
+        button.Trigger(lambda: self.driver_controller.get_button("MENU") and self.test_bindings) \
+            .whileTrue(self.drivetrain.apply_request(
+                lambda: self._point.with_module_direction(
+                    Rotation2d(-self.driver_controller.get_axis("LY", 0.05),
+                               -self.driver_controller.get_axis("LX", 0.05)))
+            ))
 
     def configureSYSID(self) -> None:
         # Run Quasistatic Translational test.

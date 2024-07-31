@@ -15,7 +15,7 @@ class OIConstants:
 
 class LEDConstants:
     port = 0
-    strip_length = 60
+    strip_length = 30
 
 
 class AutoConstants:

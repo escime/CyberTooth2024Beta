@@ -4,7 +4,7 @@ from commands2 import Command, Subsystem, sysid
 from phoenix6 import swerve, units, utils, SignalLogger, orchestra
 from typing import Callable, overload
 from wpilib import DriverStation, Notifier, RobotController
-from wpilib import sysid as sid
+from wpilib.sysid import SysIdRoutineLog
 from wpimath.geometry import Rotation2d, Pose2d
 from pathplannerlib.auto import AutoBuilder, HolonomicPathFollowerConfig, ReplanningConfig
 from pathplannerlib.controller import PPHolonomicDriveController
@@ -119,14 +119,14 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
 
         if utils.is_simulation():
             self._start_sim_thread()
-        else:
-            discovered_limelights = discover_limelights(debug=True)
-
-            if discovered_limelights:
-                limelight_address = discovered_limelights[0]
-                self.limelight = Limelight(limelight_address)
-                self.results = self.limelight.get_results()
-                self.status = self.limelight.get_results()
+        # else:
+        #     discovered_limelights = discover_limelights(debug=True)
+        #
+        #     if discovered_limelights:
+        #         limelight_address = discovered_limelights[0]
+        #         self.limelight = Limelight(limelight_address)
+        #         self.results = self.limelight.get_results()
+        #         self.status = self.limelight.get_results()
 
         self.pathplanner_rotation_overridden = False
         self.configure_pathplanner()
@@ -153,7 +153,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         # Setup SYSID Routines.
         self.sys_id_routine_translation = sysid.SysIdRoutine(
             sysid.SysIdRoutine.Config(
-                stepVoltage=4.0
+                stepVoltage=4.0,
+                recordState=lambda state: SignalLogger.write_string("state", SysIdRoutineLog.stateEnumToString(state))
             ),
             sysid.SysIdRoutine.Mechanism(
                 lambda volts: self.set_control(swerve.requests.SysIdSwerveTranslation().with_volts(volts)),
@@ -163,7 +164,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         )
         self.sys_id_routine_rotation = sysid.SysIdRoutine(
             sysid.SysIdRoutine.Config(
-                stepVoltage=4.0
+                stepVoltage=4.0,
+                recordState=lambda state: SignalLogger.write_string("state", SysIdRoutineLog.stateEnumToString(state))
             ),
             sysid.SysIdRoutine.Mechanism(
                 lambda volts: self.set_control(swerve.requests.SysIdSwerveRotation().with_volts(volts)),
@@ -173,7 +175,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         )
         self.sys_id_routine_steer = sysid.SysIdRoutine(
             sysid.SysIdRoutine.Config(
-                stepVoltage=4.0
+                stepVoltage=4.0,
+                recordState=lambda state: SignalLogger.write_string("state", SysIdRoutineLog.stateEnumToString(state))
             ),
             sysid.SysIdRoutine.Mechanism(
                 lambda volts: self.set_control(swerve.requests.SysIdSwerveSteerGains().with_volts(volts)),
@@ -210,7 +213,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                 self._has_applied_operator_perspective = True
 
         # Configure limelight settings and data transfer.
-        self.limelight_periodic()
+        # self.limelight_periodic()
 
         # Update robot velocity and acceleration.
         self.vel_acc_periodic()
