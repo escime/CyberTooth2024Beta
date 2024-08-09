@@ -1,6 +1,7 @@
 from commands2 import Command, CommandScheduler, TimedCommandRobot
 from robotcontainer import RobotContainer
-from wpilib import run
+from wpilib import run, RobotBase
+from phoenix6 import SignalLogger
 
 
 class Robot(TimedCommandRobot):
@@ -49,9 +50,13 @@ class Robot(TimedCommandRobot):
         """Reset the scheduler automatically when entering test mode."""
         CommandScheduler.getInstance().cancelAll()
         self.m_robotcontainer.enable_test_bindings(True)
+        if RobotBase.isReal():
+            SignalLogger.set_path("/media/sda1/")
+            SignalLogger.start()
 
     def testExit(self) -> None:
         self.m_robotcontainer.enable_test_bindings(False)
+        SignalLogger.stop()
 
     def simulationPeriodic(self) -> None:
         """Empty for now as well."""

@@ -119,14 +119,17 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
 
         if utils.is_simulation():
             self._start_sim_thread()
-        # else:
-        #     discovered_limelights = discover_limelights(debug=True)
-        #
-        #     if discovered_limelights:
-        #         limelight_address = discovered_limelights[0]
-        #         self.limelight = Limelight(limelight_address)
-        #         self.results = self.limelight.get_results()
-        #         self.status = self.limelight.get_results()
+            self.limelight_found = False
+        else:
+            discovered_limelights = discover_limelights(debug=True)
+            if discovered_limelights:
+                self.limelight_found = True
+                self.limelight = Limelight(discovered_limelights[0])
+                self.limelight_2 = Limelight(discovered_limelights[1])
+                self.results = self.limelight.get_results()
+                self.results_2 = self.limelight_2.get_results()
+            else:
+                self.limelight_found = False
 
         self.pathplanner_rotation_overridden = False
         self.configure_pathplanner()
@@ -213,7 +216,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                 self._has_applied_operator_perspective = True
 
         # Configure limelight settings and data transfer.
-        # self.limelight_periodic()
+        if self.limelight_found:
+            self.limelight_periodic()
 
         # Update robot velocity and acceleration.
         self.vel_acc_periodic()
