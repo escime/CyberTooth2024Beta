@@ -3,14 +3,13 @@ from commands2 import Subsystem
 from phoenix6.hardware import TalonFX
 from phoenix6.controls import MotionMagicVoltage, VoltageOut
 from phoenix6.configs import TalonFXConfiguration
-from phoenix6.configs.talon_fx_configs import FeedbackSensorSourceValue
 from phoenix6.status_code import StatusCode
 from phoenix6.utils import get_current_time_seconds, is_simulation
 
 from rev import CANSparkMax
 
-from wpilib import Mechanism2d, Color8Bit, Color, SmartDashboard, RobotController
-from wpilib.simulation import SingleJointedArmSim, DCMotorSim
+from wpilib import Mechanism2d, Color8Bit, Color, SmartDashboard, DigitalInput
+from wpilib.simulation import SingleJointedArmSim
 from wpimath.system.plant import DCMotor
 from wpimath.units import inchesToMeters, lbsToKilograms, radiansToRotations
 
@@ -30,6 +29,8 @@ class ArmSubsystem(Subsystem):
         self.elbow_mm = MotionMagicVoltage(0, enable_foc=False)
         self.elbow_configs = TalonFXConfiguration()
 
+        self.elbow_configs.current_limits.stator_current_limit = 80
+        self.elbow_configs.current_limits.stator_current_limit_enable = True
         self.elbow_gear_ratio = 83.2
         self.elbow_configs.feedback.sensor_to_mechanism_ratio = self.elbow_gear_ratio
 
@@ -48,8 +49,11 @@ class ArmSubsystem(Subsystem):
         self.elbow_slot0_configs.with_k_d(0)
         
         self.intake = CANSparkMax(31, CANSparkMax.MotorType.kBrushless)
+        self.intake.setSmartCurrentLimit(60)
         self.intake.setIdleMode(CANSparkMax.IdleMode.kBrake)
         self.intake.set(0)
+
+        self.gp_sensor = DigitalInput(0)
 
         status: StatusCode = StatusCode.STATUS_CODE_NOT_INITIALIZED
         for _ in range(0, 5):
@@ -76,6 +80,9 @@ class ArmSubsystem(Subsystem):
             1
         )
 
+        SmartDashboard.putNumberArray("Arm Location", [inchesToMeters(5.5), inchesToMeters(0), inchesToMeters(11.5),
+                                                       0, 0, 0])
+
         self.elbow_volts = VoltageOut(0, False)
 
         self.last_time = get_current_time_seconds()
@@ -86,6 +93,9 @@ class ArmSubsystem(Subsystem):
 
     def get_state(self) -> str:
         return self.state
+
+    def get_sensor_on(self) -> bool:
+        return self.gp_sensor.get()
 
     def get_position(self) -> float:
         return self.elbow.get_position(True).value_as_double
@@ -126,19 +136,18 @@ class ArmSubsystem(Subsystem):
         if is_simulation():
             self.update_sim()
             self.arm_m2d_elbow.setAngle(degrees(self.arm_sim.getAngle()))
+            SmartDashboard.putNumberArray("Arm Location", [inchesToMeters(5.5), inchesToMeters(0), inchesToMeters(11.5),
+                                                           0, 0, self.arm_sim.getAngle()])
         else:
             self.arm_m2d_elbow.setAngle(self.elbow.get_position().value_as_double)
 
         if self.state == "shoot" or self.state == "reverse_shoot":
             if self.get_at_target():
                 self.intake.setVoltage(-12)
-        elif self.state == "intake":
+        elif self.state == "intake" or self.get_sensor_on():
             self.intake.setVoltage(10)
         else:
             self.intake.setVoltage(1)
 
         SmartDashboard.putData("Arm M2D", self.arm_m2d)
-        SmartDashboard.putString("Arm Simulation Position", str(self.arm_sim.getAngle()))
         SmartDashboard.putString("Elbow Position", str(self.elbow.get_position()))
-        SmartDashboard.putString("Elbow Output Applied", str(self.elbow.get_motor_output_status()))
-        SmartDashboard.putBoolean("Elbow at position?", self.get_at_target())

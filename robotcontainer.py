@@ -1,7 +1,7 @@
 from commands2.cmd import run, runOnce, runEnd
 import wpilib.simulation
 from commands2 import Command, button, SequentialCommandGroup, ParallelCommandGroup, ParallelRaceGroup, sysid, \
-    InterruptionBehavior
+    InterruptionBehavior, ParallelDeadlineGroup
 
 from constants import OIConstants
 from subsystems.ledsubsystem import LEDs
@@ -93,7 +93,7 @@ class RobotContainer:
 
         # Setup autonomous selector on the dashboard. ------------------------------------------------------------------
         self.m_chooser = SendableChooser()
-        self.auto_names = ["Test", "TestChoreo", "Baseline", "CheckDrivetrain", "FourNote"]
+        self.auto_names = ["Test", "TestChoreo", "Baseline", "CheckDrivetrain", "FourNote", "IntakeSetup"]
         self.m_chooser.setDefaultOption("DoNothing", "DoNothing")
         for x in self.auto_names:
             self.m_chooser.addOption(x, x)
@@ -110,6 +110,27 @@ class RobotContainer:
                         -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
                     .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
                     .with_rotational_rate(-self.driver_controller.get_axis("RY", 0.05) * self._max_angular_rate)
+                )
+            )
+        )
+
+        # Slow Mode
+        button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1)).whileTrue(
+            self.drivetrain.apply_request(
+                lambda: (
+                    self._drive.with_velocity_x(
+                        -self.driver_controller.get_axis("LY", 0.05) * self._max_speed *
+                        self.driver_controller.refine_trigger("R", 0.1, 0.9, 0.5))
+                    .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) *
+                                     self._max_speed * self.driver_controller.refine_trigger("R",
+                                                                                             0.1,
+                                                                                             0.9,
+                                                                                             0.5))
+                    .with_rotational_rate(-self.driver_controller.get_axis("RY", 0.05) *
+                                          self._max_angular_rate * self.driver_controller.refine_trigger("R",
+                                                                                                         0.1,
+                                                                                                         0.9,
+                                                                                                         0.5))
                 )
             )
         )
@@ -152,26 +173,49 @@ class RobotContainer:
         #         runOnce(lambda: self.drivetrain.load_sound("affirmative"), self.drivetrain),
         #         runOnce(lambda: self.drivetrain.play_sound(), self.drivetrain)))
 
-        # Pathfind to the AMP.
-        # button.Trigger(lambda: self.driver_controller.get_d_pad_pull("N") and not self.test_bindings and
-        #                DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
-        #     SequentialCommandGroup(
-        #         runOnce(lambda: self.leds.set_state("flames"), self.leds),
-        #         self.drivetrain.pathfind_to_pose([1.86, 7.64, 90]),
-        #         runOnce(lambda: self.leds.set_state("default"), self.leds)
-        #     ))
-        # button.Trigger(lambda: self.driver_controller.get_d_pad_pull("N") and not self.test_bindings and
-        #                DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
-        #     SequentialCommandGroup(
-        #         runOnce(lambda: self.leds.set_state("flames"), self.leds),
-        #         self.drivetrain.pathfind_to_pose([14.71, 7.64, 90]),
-        #         runOnce(lambda: self.leds.set_state("default"), self.leds)
-        #     ))
+        # Pathfind to the speaker
+        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E") and not self.test_bindings and
+                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.leds.set_state("flames"), self.leds),
+                self.drivetrain.pathfind_to_pose([1.5, 5.53, 180]),
+                runOnce(lambda: self.leds.set_state("default"), self.leds)))
+        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E") and not self.test_bindings and
+                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.leds.set_state("flames"), self.leds),
+                self.drivetrain.pathfind_to_pose([15, 5.53, 0]),
+                runOnce(lambda: self.leds.set_state("default"), self.leds)))
 
-        # button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W") and not self.test_bindings).onTrue(
-        #     runOnce(lambda: self.arm.set_state("intake"), self.arm))
-        # button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E") and not self.test_bindings).onTrue(
-        #     runOnce(lambda: self.arm.set_state("stow"), self.arm))
+        # Pathfind to the amp
+        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W") and not self.test_bindings and
+                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.leds.set_state("flames"), self.leds),
+                self.drivetrain.pathfind_to_pose([1.86, 7.64, 90]),
+                runOnce(lambda: self.leds.set_state("default"), self.leds)))
+        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W") and not self.test_bindings and
+                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.leds.set_state("flames"), self.leds),
+                self.drivetrain.pathfind_to_pose([14.71, 7.64, 90]),
+                runOnce(lambda: self.leds.set_state("default"), self.leds)))
+
+        # Pathfind to the source
+        button.Trigger(lambda: self.driver_controller.get_button("B") and not self.test_bindings and
+                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.leds.set_state("flames"), self.leds),
+                self.drivetrain.pathfind_to_pose([15, 1, 0]),
+                runOnce(lambda: self.leds.set_state("default"), self.leds)))
+        button.Trigger(lambda: self.driver_controller.get_button("B") and not self.test_bindings and
+                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.leds.set_state("flames"), self.leds),
+                self.drivetrain.pathfind_to_pose([1.5, 1, 180]),
+                runOnce(lambda: self.leds.set_state("default"), self.leds)))
+
+        # Arm manual controls.
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("N") and not self.test_bindings).whileTrue(
             run(lambda: self.arm.set_voltage_direct(1), self.arm)).onFalse(
             run(lambda: self.arm.set_voltage_direct(0), self.arm))
@@ -179,10 +223,11 @@ class RobotContainer:
             run(lambda: self.arm.set_voltage_direct(-1), self.arm)).onFalse(
             run(lambda: self.arm.set_voltage_direct(0), self.arm))
 
+        # Arm automatic controls.
         button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).onTrue(
             runOnce(lambda: self.arm.set_state("intake"), self.arm)).onFalse(
             runOnce(lambda: self.arm.set_state("stow"), self.arm))
-        button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1)).onTrue(
+        button.Trigger(lambda: self.driver_controller.get_button("LB")).onTrue(
             runOnce(lambda: self.arm.set_state("shoot"), self.arm)).onFalse(
             runOnce(lambda: self.arm.set_state("stow"), self.arm))
         button.Trigger(lambda: self.driver_controller.get_button("RB")).onTrue(
@@ -321,3 +366,8 @@ class RobotContainer:
                                       runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override(True)))
         NamedCommands.registerCommand("disable_override_heading",
                                       runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override(False)))
+        NamedCommands.registerCommand("intake", runOnce(lambda: self.arm.set_state("intake"),
+                                                        self.arm))
+        NamedCommands.registerCommand("stow", runOnce(lambda: self.arm.set_state("stow"), self.arm))
+        NamedCommands.registerCommand("reverse_shoot", runOnce(lambda: self.arm.set_state("reverse_shoot"),
+                                                               self.arm))

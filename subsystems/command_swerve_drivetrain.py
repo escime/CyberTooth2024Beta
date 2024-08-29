@@ -5,15 +5,14 @@ from phoenix6 import swerve, units, utils, SignalLogger, orchestra
 from typing import Callable, overload
 from wpilib import DriverStation, Notifier, RobotController
 from wpilib.sysid import SysIdRoutineLog
-from wpimath.geometry import Rotation2d, Pose2d
+from wpimath.geometry import Rotation2d, Pose2d, Translation2d
 from pathplannerlib.auto import AutoBuilder, HolonomicPathFollowerConfig, ReplanningConfig
 from pathplannerlib.controller import PPHolonomicDriveController
 from pathplannerlib.config import PIDConstants
 from pathplannerlib.path import PathPlannerPath, PathConstraints, GoalEndState
 from pathplannerlib.commands import PathfindHolonomic
 from constants import AutoConstants
-from limelight import Limelight, discover_limelights
-from limelightresults import parse_results
+from ntcore import NetworkTableInstance
 
 
 class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
@@ -119,17 +118,11 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
 
         if utils.is_simulation():
             self._start_sim_thread()
-            self.limelight_found = False
-        else:
-            discovered_limelights = discover_limelights(debug=True)
-            if discovered_limelights:
-                self.limelight_found = True
-                self.limelight = Limelight(discovered_limelights[0])
-                self.limelight_2 = Limelight(discovered_limelights[1])
-                self.results = self.limelight.get_results()
-                self.results_2 = self.limelight_2.get_results()
-            else:
-                self.limelight_found = False
+
+        self.odo_ll_table = NetworkTableInstance.getDefault().getTable("limelight")
+        self.gp_ll_table = NetworkTableInstance.getDefault().getTable("limelight-gp")
+        self.gp_ll_gp_mode = False
+        self.tx = 0
 
         self.pathplanner_rotation_overridden = False
         self.configure_pathplanner()
@@ -216,8 +209,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                 self._has_applied_operator_perspective = True
 
         # Configure limelight settings and data transfer.
-        if self.limelight_found:
-            self.limelight_periodic()
+        self.limelight_periodic()
 
         # Update robot velocity and acceleration.
         self.vel_acc_periodic()
@@ -235,16 +227,35 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
 
     def limelight_periodic(self) -> None:
         """Fuses limelight data with the pose estimator."""
-        if not utils.is_simulation():
-            self.limelight.update_robot_orientation(self.get_pose().rotation())
-            limelight_result = parse_results(self.limelight.get_results())
-            if limelight_result.fiducial_id > 0 and limelight_result.botpose_wpiblue[9] < 10:
-                self.add_vision_measurement(Pose2d(limelight_result.botpose_wpiblue[0],
-                                                   limelight_result.botpose_wpiblue[1],
-                                                   Rotation2d.fromDegrees(
-                                                       (limelight_result.botpose_wpiblue[5] + 360) % 360)),
-                                            limelight_result.timestamp,
-                                            (0.7, 0.7, 999999999))  # TODO Look into dynamically modifying these.
+        self.odo_ll_table.putNumberArray("robot_orientation_set",
+                                         [self.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
+        if not self.gp_ll_gp_mode:
+            self.gp_ll_table.putNumberArray("robot_orientation_set",
+                                            [self.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
+
+        odo_ll_botpose = self.odo_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0,
+                                                                                           0.0, 0.0, 0.0, 0.0,
+                                                                                           0.0, 0.0, 0.0, 0.0])
+        if not self.gp_ll_gp_mode:
+            gp_ll_botpose = self.gp_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0,
+                                                                                             0.0, 0.0, 0.0, 0.0,
+                                                                                             0.0, 0.0, 0.0, 0.0])
+        if not self.gp_ll_gp_mode:
+            if odo_ll_botpose[9] < gp_ll_botpose[9] < 20 and odo_ll_botpose[7] >= 1:
+                self.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]),
+                                                   Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
+                                            utils.get_current_time_seconds() - (odo_ll_botpose[6]))
+            elif gp_ll_botpose[9] < odo_ll_botpose[9] < 10 and gp_ll_botpose[7] >= 1:
+                self.add_vision_measurement(Pose2d(Translation2d(gp_ll_botpose[0], gp_ll_botpose[1]),
+                                                   Rotation2d.fromDegrees((gp_ll_botpose[5] + 360) % 360)),
+                                            utils.get_current_time_seconds() - (gp_ll_botpose[6]))
+        else:
+            if odo_ll_botpose[9] and odo_ll_botpose[7] >= 1:
+                self.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]),
+                                                   Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
+                                            utils.get_current_time_seconds() - (odo_ll_botpose[6]))
+            if self.gp_ll_table.getEntry("tv").getDouble(-1) == 1:
+                self.tx = self.gp_ll_table.getEntry("tx").getDouble(0)
 
     def get_field_relative_velocity(self) -> [float, float]:
         """Returns the instantaneous velocity of the robot."""
@@ -385,7 +396,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
     def pathfind_to_pose(self, target: [float, float, float]):
         """Command for pathfinding between current pose and a target pose in teleoperated."""
         target_pose = Pose2d(target[0], target[1], Rotation2d.fromDegrees(target[2]))
-        constraints = PathConstraints(3, 4, 9.424, 12.567)
+        constraints = PathConstraints(4, 4, 9.424, 12.567)
 
         return PathfindHolonomic(
             constraints,

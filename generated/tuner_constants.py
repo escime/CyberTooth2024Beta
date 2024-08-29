@@ -38,7 +38,14 @@ class TunerConstants:
 
     # Initial configs for the drive and steer motors and the CANcoder; these cannot be null.
     # Some configs will be overwritten; check the `with_*_initial_configs()` API documentation.
-    _drive_initial_configs = configs.TalonFXConfiguration()
+    _drive_initial_configs = (
+        configs.TalonFXConfiguration()
+            .with_current_limits(
+                configs.CurrentLimitsConfigs()
+                    .with_stator_current_limit(100)
+                    .with_stator_current_limit_enable(True)
+        )
+    )
     _steer_initial_configs = (
         configs.TalonFXConfiguration()
             .with_current_limits(
