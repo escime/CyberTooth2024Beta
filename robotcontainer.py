@@ -16,6 +16,7 @@ from telemetry import Telemetry
 from phoenix6 import swerve, utils, SignalLogger
 from wpimath.geometry import Pose2d, Rotation2d
 from wpimath.units import rotationsToRadians
+from wpinet import PortForwarder
 
 from math import pi
 
@@ -43,6 +44,9 @@ class RobotContainer:
             print("Not a simulation, logging enabled!")
             DataLogManager.start()
             DriverStation.startDataLog(DataLogManager.getLog(), True)
+            for i in range(5801, 5810):
+                PortForwarder.getInstance().add(i, "limelight.local", i)
+                PortForwarder.getInstance().add(i + 10, "limelight-gp.local", i)
         else:
             print("Simulated, logging disabled.")
 
