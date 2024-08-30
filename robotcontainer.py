@@ -5,7 +5,7 @@ from commands2 import Command, button, SequentialCommandGroup, ParallelCommandGr
 
 from constants import OIConstants
 from subsystems.ledsubsystem import LEDs
-from subsystems.armsubsystem import ArmSubsystem
+from subsystems.elevatorsubsystem import ElevatorSubsystem
 from wpilib import SmartDashboard, SendableChooser, DriverStation, DataLogManager, Timer
 from helpers.custom_hid import CustomHID
 from pathplannerlib.auto import NamedCommands, PathPlannerAuto
@@ -48,7 +48,7 @@ class RobotContainer:
 
         # Startup subsystems. ------------------------------------------------------------------------------------------
         self.leds = LEDs(self.timer)
-        self.arm = ArmSubsystem()
+        self.elevator = ElevatorSubsystem()
 
         # Setup driver & operator controllers. -------------------------------------------------------------------------
         self.driver_controller = CustomHID(OIConstants.kDriverControllerPort, "xbox")
@@ -217,42 +217,17 @@ class RobotContainer:
 
         # Arm manual controls.
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("N") and not self.test_bindings).whileTrue(
-            run(lambda: self.arm.set_voltage_direct(1), self.arm)).onFalse(
-            run(lambda: self.arm.set_voltage_direct(0), self.arm))
+            run(lambda: self.elevator.set_voltage_direct(1), self.elevator)).onFalse(
+            run(lambda: self.elevator.set_voltage_direct(0), self.elevator))
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("S") and not self.test_bindings).whileTrue(
-            run(lambda: self.arm.set_voltage_direct(-1), self.arm)).onFalse(
-            run(lambda: self.arm.set_voltage_direct(0), self.arm))
+            run(lambda: self.elevator.set_voltage_direct(-1), self.elevator)).onFalse(
+            run(lambda: self.elevator.set_voltage_direct(0), self.elevator))
 
         # Arm automatic controls.
         button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).onTrue(
-            runOnce(lambda: self.arm.set_state("intake"), self.arm)).onFalse(
-            runOnce(lambda: self.arm.set_state("stow"), self.arm))
+            runOnce(lambda: self.elevator.set_state("stow"), self.elevator))
         button.Trigger(lambda: self.driver_controller.get_button("LB")).onTrue(
-            runOnce(lambda: self.arm.set_state("shoot"), self.arm)).onFalse(
-            runOnce(lambda: self.arm.set_state("stow"), self.arm))
-        button.Trigger(lambda: self.driver_controller.get_button("RB")).onTrue(
-            runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm)).onFalse(
-            runOnce(lambda: self.arm.set_state("stow"), self.arm))
-
-        # Cube acquired light
-        button.Trigger(lambda: self.arm.get_sensor_on()).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
-                runOnce(lambda: self.leds.set_flash_color_color([0, 255, 0]), self.leds),
-                runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
-                WaitCommand(2),
-                runOnce(lambda: self.leds.set_state("gp_held"), self.leds)
-            ).ignoringDisable(True)
-        )
-        button.Trigger(lambda: self.arm.get_sensor_on()).onFalse(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
-                runOnce(lambda: self.leds.set_flash_color_color([255, 0, 0]), self.leds),
-                runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
-                WaitCommand(0.5),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)
-            ).ignoringDisable(True)
-        )
+            runOnce(lambda: self.elevator.set_state("max"), self.elevator))
 
         # Configuration for telemetry.
         if utils.is_simulation():
@@ -386,8 +361,3 @@ class RobotContainer:
                                       runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override(True)))
         NamedCommands.registerCommand("disable_override_heading",
                                       runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override(False)))
-        NamedCommands.registerCommand("intake", runOnce(lambda: self.arm.set_state("intake"),
-                                                        self.arm))
-        NamedCommands.registerCommand("stow", runOnce(lambda: self.arm.set_state("stow"), self.arm))
-        NamedCommands.registerCommand("reverse_shoot", runOnce(lambda: self.arm.set_state("reverse_shoot"),
-                                                               self.arm))
