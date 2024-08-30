@@ -9,9 +9,10 @@ from phoenix6.utils import get_current_time_seconds, is_simulation
 from wpilib import Mechanism2d, Color8Bit, Color, SmartDashboard
 from wpilib.simulation import ElevatorSim
 from wpimath.system.plant import DCMotor
-from wpimath.units import inchesToMeters, lbsToKilograms, radiansToRotations
 
-from math import pi, degrees
+from math import pi
+
+from constants import ElevatorConstants
 
 
 class ElevatorSubsystem(Subsystem):
@@ -19,43 +20,42 @@ class ElevatorSubsystem(Subsystem):
         super().__init__()
 
         self._last_sim_time = get_current_time_seconds()
-        self.state_values = {"stow": 0, "max": 60}  # TODO replace with constants
+        self.state_values = ElevatorConstants.state_values
         self.state = "stow"
         self.last_time = get_current_time_seconds()
 
         self.lift_main_mm = MotionMagicVoltage(0, enable_foc=False)
         self.lift_main_vo = VoltageOut(0, enable_foc=False)
 
-        use_remote = False
-        remote_sensor_id = 31
-        for motor_id in [30]:
+        for motor_id in ElevatorConstants.can_ids:
             motor = TalonFX(motor_id)
             motor_config = TalonFXConfiguration()
 
-            if motor_id == [30][0]:
-                if use_remote:
-                    motor_config.feedback.feedback_remote_sensor_id = remote_sensor_id
-                    motor_config.feedback.feedback_sensor_source = TalonFXConfiguration().feedback.feedback_sensor_source.REMOTE_CANCODER
+            if motor_id == ElevatorConstants.can_ids[0]:
+                if ElevatorConstants.use_remote_sensor:
+                    motor_config.feedback.feedback_remote_sensor_id = ElevatorConstants.remote_sensor_id
+                    motor_config.feedback.feedback_sensor_source = (
+                        TalonFXConfiguration().feedback.feedback_sensor_source.REMOTE_CANCODER)
                 else:
                     motor.set_position(0)
 
-            motor_config.current_limits.stator_current_limit = 80  # TODO replace with constants
-            motor_config.current_limits.stator_current_limit_enable = True  # TODO replace with constants
-            motor_config.feedback.sensor_to_mechanism_ratio = 50  # TODO replace with constants
+            motor_config.current_limits.stator_current_limit = ElevatorConstants.stator_current_limit
+            motor_config.current_limits.stator_current_limit_enable = ElevatorConstants.use_stator_current_limit
+            motor_config.feedback.sensor_to_mechanism_ratio = ElevatorConstants.gearbox_ratio
 
             motor_mm_config = motor_config.motion_magic
-            motor_mm_config.motion_magic_cruise_velocity = 6  # TODO replace with constants
-            motor_mm_config.motion_magic_acceleration = 15  # TODO replace with constants
-            motor_mm_config.motion_magic_jerk = 100  # TODO replace with constants
+            motor_mm_config.motion_magic_cruise_velocity = ElevatorConstants.mm_cruise_velocity
+            motor_mm_config.motion_magic_acceleration = ElevatorConstants.mm_acceleration
+            motor_mm_config.motion_magic_jerk = ElevatorConstants.mm_jerk
 
             motor_slot0_config = motor_config.slot0
-            motor_slot0_config.with_k_g(0.18)  # TODO replace with constants
-            motor_slot0_config.with_k_s(0.25)  # TODO replace with constants
-            motor_slot0_config.with_k_v(1.59)  # TODO replace with constants
-            motor_slot0_config.with_k_a(0.00)  # TODO replace with constants
-            motor_slot0_config.with_k_p(60)  # TODO replace with constants
-            motor_slot0_config.with_k_i(0)  # TODO replace with constants
-            motor_slot0_config.with_k_d(0)  # TODO replace with constants
+            motor_slot0_config.with_k_g(ElevatorConstants.kg)
+            motor_slot0_config.with_k_s(ElevatorConstants.ks)
+            motor_slot0_config.with_k_v(ElevatorConstants.kv)
+            motor_slot0_config.with_k_a(ElevatorConstants.ka)
+            motor_slot0_config.with_k_p(ElevatorConstants.kp)
+            motor_slot0_config.with_k_i(ElevatorConstants.ki)
+            motor_slot0_config.with_k_d(ElevatorConstants.kd)
 
             status: StatusCode = StatusCode.STATUS_CODE_NOT_INITIALIZED
             for _ in range(0, 5):
@@ -65,28 +65,32 @@ class ElevatorSubsystem(Subsystem):
             if not status.is_ok():
                 print(f"Could not apply configs, error code: {status.name}")
 
-            if motor_id != [30][0]:
-                follower_control_request = Follower([30][0], False)
+            if motor_id != ElevatorConstants.can_ids[0]:
+                follower_control_request = Follower(ElevatorConstants.can_ids[0], False)
                 motor.set_control(follower_control_request)
             else:
                 self.lift_main = motor
 
         self.lift_sim = self.lift_main.sim_state
         self.elevator_sim = ElevatorSim(
-            DCMotor.krakenX60(len([30])),
-            50,  # TODO replace with constants
-            lbsToKilograms(10),  # TODO replace with constants
-            inchesToMeters(2),  # TODO replace with constants
-            inchesToMeters(0),  # TODO replace with constants
-            inchesToMeters(60),  # TODO replace with constants
+            DCMotor.krakenX60(len(ElevatorConstants.can_ids)),
+            ElevatorConstants.gearbox_ratio,
+            ElevatorConstants.carriage_weight,
+            ElevatorConstants.drum_diameter_m,
+            ElevatorConstants.min_height_m,
+            ElevatorConstants.max_height_m,
             True,
             0,
-            [0.01]
+            [0.001]
         )
 
-        self.lift_m2d = Mechanism2d(20, 50)
+        self.lift_m2d = Mechanism2d(20, ElevatorConstants.max_height_in)
         lift_root = self.lift_m2d.getRoot("Lift Root", 10, 0)
-        self.elevator_m2d = lift_root.appendLigament("Elevator", self.elevator_sim.getPositionInches(), 90)
+        self.elevator_m2d = lift_root.appendLigament("Elevator",
+                                                     self.elevator_sim.getPositionInches(),
+                                                     ElevatorConstants.elevator_angle_degrees,
+                                                     6,
+                                                     Color8Bit(Color.kRed))
 
     def set_state(self, state: str) -> None:
         self.state = state
@@ -99,7 +103,8 @@ class ElevatorSubsystem(Subsystem):
         return self.lift_main.get_position(True).value_as_double
 
     def get_at_target(self) -> bool:
-        if self.state_values[self.state] - 0.05 < self.get_position() <= self.state_values[self.state] + 0.05:  # TODO replace with constants
+        if (self.state_values[self.state] - ElevatorConstants.elevator_at_target_threshold < self.get_position() <=
+                self.state_values[self.state] + ElevatorConstants.elevator_at_target_threshold):
             return True
         else:
             return False
@@ -110,13 +115,13 @@ class ElevatorSubsystem(Subsystem):
                                    .with_limit_reverse_motion(self.get_reverse_limit_triggered()))
 
     def get_forward_limit_triggered(self) -> bool:
-        if self.lift_main.get_position().value_as_double > 60:  # TODO replace with constants
+        if self.lift_main.get_position().value_as_double > ElevatorConstants.elevator_upper_limit:
             return True
         else:
             return False
 
     def get_reverse_limit_triggered(self) -> bool:
-        if self.lift_main.get_position().value_as_double < 0:  # TODO replace with constants
+        if self.lift_main.get_position().value_as_double < ElevatorConstants.elevator_lower_limit:
             return True
         else:
             return False
@@ -128,15 +133,19 @@ class ElevatorSubsystem(Subsystem):
 
         self.elevator_sim.setInput(0, self.lift_sim.motor_voltage)
         self.elevator_sim.update(dt)
-        self.lift_sim.set_raw_rotor_position(radiansToRotations(self.elevator_sim.getPositionInches() * 50))  # TODO replace with constants
-        self.lift_sim.set_rotor_velocity(radiansToRotations(self.elevator_sim.getVelocity() * 50))  # TODO replace with constants
+        self.lift_sim.set_raw_rotor_position(self.elevator_sim.getPositionInches() * ElevatorConstants.gearbox_ratio /
+                                             (ElevatorConstants.drum_diameter_in * pi))
+        self.lift_sim.set_rotor_velocity(self.elevator_sim.getVelocity() * ElevatorConstants.gearbox_ratio)
 
     def periodic(self) -> None:
         if is_simulation():
             self.update_sim()
-            self.elevator_m2d.setLength(inchesToMeters(self.elevator_sim.getPositionInches()))
+            self.elevator_m2d.setLength(self.elevator_sim.getPositionInches())
         else:
-            self.elevator_m2d.setAngle(self.lift_main.get_position().value_as_double)
+            self.elevator_m2d.setLength(self.lift_main.get_position().value_as_double * pi *
+                                        ElevatorConstants.drum_diameter_in)
 
         SmartDashboard.putData("Elevator M2D", self.lift_m2d)
-        SmartDashboard.putString("Elevator Position", str(self.lift_main.get_position()))
+        SmartDashboard.putString("Elevator Position", str(self.elevator_sim.getPositionInches()))
+        SmartDashboard.putString("Lift Motor Position", str(self.lift_main.get_position()))
+        SmartDashboard.putString("Elevator Setpoint", str(self.lift_main.get_motor_output_status()))

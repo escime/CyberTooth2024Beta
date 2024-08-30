@@ -217,16 +217,17 @@ class RobotContainer:
 
         # Arm manual controls.
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("N") and not self.test_bindings).whileTrue(
-            run(lambda: self.elevator.set_voltage_direct(1), self.elevator)).onFalse(
+            run(lambda: self.elevator.set_voltage_direct(3), self.elevator)).onFalse(
             run(lambda: self.elevator.set_voltage_direct(0), self.elevator))
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("S") and not self.test_bindings).whileTrue(
-            run(lambda: self.elevator.set_voltage_direct(-1), self.elevator)).onFalse(
+            run(lambda: self.elevator.set_voltage_direct(-3), self.elevator)).onFalse(
             run(lambda: self.elevator.set_voltage_direct(0), self.elevator))
 
         # Arm automatic controls.
-        button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).onTrue(
+        button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)
+                       and not self.test_bindings).onTrue(
             runOnce(lambda: self.elevator.set_state("stow"), self.elevator))
-        button.Trigger(lambda: self.driver_controller.get_button("LB")).onTrue(
+        button.Trigger(lambda: self.driver_controller.get_button("LB") and not self.test_bindings).onTrue(
             runOnce(lambda: self.elevator.set_state("max"), self.elevator))
 
         # Configuration for telemetry.
