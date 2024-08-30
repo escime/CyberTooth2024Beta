@@ -1,7 +1,7 @@
 from commands2.cmd import run, runOnce, runEnd
 import wpilib.simulation
 from commands2 import Command, button, SequentialCommandGroup, ParallelCommandGroup, ParallelRaceGroup, sysid, \
-    InterruptionBehavior, ParallelDeadlineGroup
+    InterruptionBehavior, ParallelDeadlineGroup, WaitCommand
 
 from constants import OIConstants
 from subsystems.ledsubsystem import LEDs
@@ -233,6 +233,26 @@ class RobotContainer:
         button.Trigger(lambda: self.driver_controller.get_button("RB")).onTrue(
             runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm)).onFalse(
             runOnce(lambda: self.arm.set_state("stow"), self.arm))
+
+        # Cube acquired light
+        button.Trigger(lambda: self.arm.get_sensor_on()).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
+                runOnce(lambda: self.leds.set_flash_color_color([0, 255, 0]), self.leds),
+                runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
+                WaitCommand(2),
+                runOnce(lambda: self.leds.set_state("gp_held"), self.leds)
+            ).ignoringDisable(True)
+        )
+        button.Trigger(lambda: self.arm.get_sensor_on()).onFalse(
+            SequentialCommandGroup(
+                runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
+                runOnce(lambda: self.leds.set_flash_color_color([255, 0, 0]), self.leds),
+                runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
+                WaitCommand(0.5),
+                runOnce(lambda: self.leds.set_state("default"), self.leds)
+            ).ignoringDisable(True)
+        )
 
         # Configuration for telemetry.
         if utils.is_simulation():
