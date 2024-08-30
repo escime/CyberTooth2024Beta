@@ -47,19 +47,19 @@ class AutoConstants:
 
 
 class ElevatorConstants:
-    can_ids = [30]  # The main motor should be listed first. The rest may be listed in any order.
+    can_ids = [30, 31]  # The main motor should be listed first. The rest may be listed in any order.
 
     drum_diameter_in = 2
     drum_diameter_m = inchesToMeters(drum_diameter_in)
     state_values = {"stow": 0, "max": 60 / (drum_diameter_in * pi)}
 
-    use_remote_sensor = False
-    remote_sensor_id = 31
+    use_remote_sensor = True
+    remote_sensor_id = 32
 
     stator_current_limit = 80
     use_stator_current_limit = True
 
-    gearbox_ratio = 12
+    gearbox_ratio = 4
 
     mm_cruise_velocity = 10
     mm_acceleration = 15

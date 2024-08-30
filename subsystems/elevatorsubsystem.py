@@ -1,6 +1,6 @@
 from commands2 import Subsystem
 
-from phoenix6.hardware import TalonFX
+from phoenix6.hardware import TalonFX, CANcoder
 from phoenix6.controls import MotionMagicVoltage, VoltageOut, Follower
 from phoenix6.configs import TalonFXConfiguration
 from phoenix6.status_code import StatusCode
@@ -31,13 +31,7 @@ class ElevatorSubsystem(Subsystem):
             motor = TalonFX(motor_id)
             motor_config = TalonFXConfiguration()
 
-            if motor_id == ElevatorConstants.can_ids[0]:
-                if ElevatorConstants.use_remote_sensor:
-                    motor_config.feedback.feedback_remote_sensor_id = ElevatorConstants.remote_sensor_id
-                    motor_config.feedback.feedback_sensor_source = (
-                        TalonFXConfiguration().feedback.feedback_sensor_source.REMOTE_CANCODER)
-                else:
-                    motor.set_position(0)
+            motor.set_position(0)
 
             motor_config.current_limits.stator_current_limit = ElevatorConstants.stator_current_limit
             motor_config.current_limits.stator_current_limit_enable = ElevatorConstants.use_stator_current_limit
