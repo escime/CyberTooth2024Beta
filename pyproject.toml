@@ -21,13 +21,11 @@ robotpy_extras = [
     # "phoenix6",
     # "photonvision",
     # "playingwithfusion",
-    # "rev",
+    "rev",
     # "romi",
     # "sim",
     # "xrp",
 ]
 
 # Other pip packages to install
-requires = [
-    "limelightlib-python"
-]
+requires = []

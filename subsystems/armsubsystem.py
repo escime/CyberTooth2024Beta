@@ -20,7 +20,7 @@ class ArmSubsystem(Subsystem):
     def __init__(self):
         super().__init__()
         self._last_sim_time = get_current_time_seconds()
-        self.state_values = {"stow": 0, "intake": 0.5, "shoot": 0.4, "reverse_shoot": 0.2}
+        self.state_values = {"stow": 0, "intake": 0.49, "shoot": 0.4, "reverse_shoot": 0.2}
         self.state = "stow"
 
         self.elbow = TalonFX(30, "rio")
@@ -31,20 +31,20 @@ class ArmSubsystem(Subsystem):
 
         self.elbow_configs.current_limits.stator_current_limit = 80
         self.elbow_configs.current_limits.stator_current_limit_enable = True
-        self.elbow_gear_ratio = 83.2
+        self.elbow_gear_ratio = 20.8
         self.elbow_configs.feedback.sensor_to_mechanism_ratio = self.elbow_gear_ratio
 
         self.elbow_mm_configs = self.elbow_configs.motion_magic
-        self.elbow_mm_configs.motion_magic_cruise_velocity = 6
-        self.elbow_mm_configs.motion_magic_acceleration = 15
+        self.elbow_mm_configs.motion_magic_cruise_velocity = 0.5
+        self.elbow_mm_configs.motion_magic_acceleration = 5
         self.elbow_mm_configs.motion_magic_jerk = 100
 
         self.elbow_slot0_configs = self.elbow_configs.slot0
-        self.elbow_slot0_configs.with_k_g(0.18)
+        self.elbow_slot0_configs.with_k_g(0.66)
         self.elbow_slot0_configs.with_k_s(0.25)
-        self.elbow_slot0_configs.with_k_v(1.59)
-        self.elbow_slot0_configs.with_k_a(0.00)
-        self.elbow_slot0_configs.with_k_p(60)
+        self.elbow_slot0_configs.with_k_v(0.4)
+        self.elbow_slot0_configs.with_k_a(0.02)
+        self.elbow_slot0_configs.with_k_p(90)
         self.elbow_slot0_configs.with_k_i(0)
         self.elbow_slot0_configs.with_k_d(0)
         
@@ -95,7 +95,7 @@ class ArmSubsystem(Subsystem):
         return self.state
 
     def get_sensor_on(self) -> bool:
-        return self.gp_sensor.get()
+        return not self.gp_sensor.get()
 
     def get_position(self) -> float:
         return self.elbow.get_position(True).value_as_double

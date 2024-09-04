@@ -121,7 +121,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
 
         self.odo_ll_table = NetworkTableInstance.getDefault().getTable("limelight")
         self.gp_ll_table = NetworkTableInstance.getDefault().getTable("limelight-gp")
-        self.gp_ll_gp_mode = False
+        self.gp_ll_gp_mode = True
         self.tx = 0
 
         self.pathplanner_rotation_overridden = False

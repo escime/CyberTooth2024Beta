@@ -29,8 +29,16 @@ class LEDs(Subsystem):
             self.default_pattern.append(AddressableLED.LEDData(0, 0, 0))
 
         # Prepare gp_held pattern
-        self.gp_held_pattern = [AddressableLED.LEDData(149, 50, 168)] * 10
-        for i in range(0, LEDConstants.strip_length - 10):
+        self.gp_held_pattern = [AddressableLED.LEDData(149, 50, 168)] * 2
+        for i in range(0, 2):
+            self.gp_held_pattern.append(AddressableLED.LEDData(int(149 * 0.75), int(50 * 0.75), int(168 * 0.75)))
+        for i in range(0, 3):
+            self.gp_held_pattern.append(AddressableLED.LEDData(int(149 * 0.5), int(100 * 0.75), int(168 * 0.5)))
+        for i in range(0, 7):
+            self.gp_held_pattern.append(AddressableLED.LEDData(int(149 * 0.25), int(200 * 0.5), int(168 * 0.25)))
+        for i in range(0, 7):
+            self.gp_held_pattern.append(AddressableLED.LEDData(int(149 * 0.1), int(250 * 0.75), int(168 * 0.1)))
+        for i in range(0, LEDConstants.strip_length - 21):
             self.gp_held_pattern.append(AddressableLED.LEDData(0, 255, 0))
 
         # Prepare rainbow pattern
@@ -75,9 +83,6 @@ class LEDs(Subsystem):
             self.timer_lights_pattern.append(AddressableLED.LEDData(0, 0, 0))
 
         # Prepare alignment settings
-        # self.align_pattern = [AddressableLED.LEDData(149, 50, 168)] * 10
-        # for i in range(0, LEDConstants.strip_length - 10):
-        #     self.align_pattern.append(AddressableLED.LEDData(0, 0, 0))
         self.align_pattern = [AddressableLED.LEDData(255, 0, 0)] * LEDConstants.strip_length
         self.misalignment = 0
 
@@ -204,19 +209,6 @@ class LEDs(Subsystem):
             (LEDConstants.strip_length - self.timer_lights_segment)
         for i in range(0, self.timer_lights_segment):
             self.timer_lights_pattern.append(AddressableLED.LEDData(0, 0, 0))
-
-    # def align(self) -> None:
-    #     time_scalar = (abs(self.misalignment) * 0.95) + 0.05
-    #     if self.timer.get() - time_scalar > self.last_time:
-    #         if self.misalignment > 0:
-    #             self.buffer = self.align_pattern
-    #             self.align_pattern = self.align_pattern[1:] + self.align_pattern[:1]
-    #         elif self.misalignment < 0:
-    #             self.buffer = self.align_pattern
-    #             self.align_pattern = self.align_pattern[-1:] + self.align_pattern[:-1]
-    #         else:
-    #             self.buffer = self.align_pattern
-    #         self.last_time = self.timer.get()
 
     def align(self) -> None:
         alignment_amount = LEDConstants.strip_length - int(LEDConstants.strip_length -

@@ -23,6 +23,7 @@ from math import pi
 from commands.baseline import Baseline
 from commands.check_drivetrain import CheckDrivetrain
 from commands.alignment_leds import AlignmentLEDs
+from commands.drive_to_gamepiece import DriveToGamePiece
 
 
 class RobotContainer:
@@ -44,9 +45,9 @@ class RobotContainer:
             print("Not a simulation, logging enabled!")
             DataLogManager.start()
             DriverStation.startDataLog(DataLogManager.getLog(), True)
-            for i in range(5801, 5810):
-                PortForwarder.getInstance().add(i, "limelight.local", i)
-                PortForwarder.getInstance().add(i + 10, "limelight-gp.local", i)
+            # for i in range(5801, 5810):
+            #     PortForwarder.getInstance().add(i, "limelight.local", i)
+            #     PortForwarder.getInstance().add(i + 10, "limelight-gp.local", i)
         else:
             print("Simulated, logging disabled.")
 
@@ -257,6 +258,9 @@ class RobotContainer:
                 runOnce(lambda: self.leds.set_state("default"), self.leds)
             ).ignoringDisable(True)
         )
+
+        button.Trigger(lambda: self.driver_controller.get_button("X")).whileTrue(
+            DriveToGamePiece(self.drivetrain, self.arm))
 
         # Configuration for telemetry.
         if utils.is_simulation():
