@@ -4321,7 +4321,7 @@
                     "command": {
                         "type": "named",
                         "data": {
-                            "name": "override_heading"
+                            "name": "override_heading_goal"
                         }
                     }
                 },
@@ -4347,7 +4347,7 @@
                     "command": {
                         "type": "named",
                         "data": {
-                            "name": "override_heading"
+                            "name": "override_heading_goal"
                         }
                     }
                 },
@@ -4373,7 +4373,7 @@
                     "command": {
                         "type": "named",
                         "data": {
-                            "name": "override_heading"
+                            "name": "override_heading_goal"
                         }
                     }
                 }

@@ -1,5 +1,5 @@
 from commands2 import Subsystem
-from wpilib import AddressableLED, Timer
+from wpilib import AddressableLED, Timer, SmartDashboard, Color
 from constants import LEDConstants
 from random import randint
 
@@ -93,6 +93,12 @@ class LEDs(Subsystem):
         self.flame_color = [255, 0, 0]
         self.flame_pattern = [AddressableLED.LEDData(255, 0, 0)] * LEDConstants.strip_length
 
+        # Set up settings for notifiers
+        self.notifier_on = False
+        self.priority_notifier = [255, 0, 0]
+
+        self.display_buffer = [0] * LEDConstants.strip_length
+
         self.last_time = self.timer.get()
 
     def set_state(self, target_state: str) -> None:
@@ -120,7 +126,17 @@ class LEDs(Subsystem):
             self.flames()
         else:
             self.default()
+
+        if self.notifier_on:
+            self.buffer = self.buffer[:-5]
+            for i in range(0, 5):
+                self.buffer.append(AddressableLED.LEDData(self.priority_notifier[0], self.priority_notifier[1],
+                                                          self.priority_notifier[2]))
+
         self.chain.setData(self.buffer)
+        for i in range(0, LEDConstants.strip_length):
+            self.display_buffer[i] = Color(self.buffer[i].r, self.buffer[i].g, self.buffer[i].b).hexString()
+        SmartDashboard.putStringArray("LED Display", self.display_buffer)
 
     def default(self) -> None:
         """Logic for running default animation."""
@@ -269,3 +285,10 @@ class LEDs(Subsystem):
     def reset_flames(self) -> None:
         self.flame_pattern = [AddressableLED.LEDData(0, 0, 0)] * LEDConstants.strip_length
         self.heat = [0] * LEDConstants.strip_length
+
+    def set_notifier(self, color: [int, int, int]) -> None:
+        if color[0] == -1 and color[1] == -1 and color[2] == -1:
+            self.notifier_on = False
+        else:
+            self.notifier_on = True
+            self.priority_notifier = color

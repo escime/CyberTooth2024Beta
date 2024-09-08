@@ -48,48 +48,48 @@
     },
     {
       "anchor": {
-        "x": 8.19999152123839,
-        "y": 6.604911811820771
+        "x": 6.548763568283198,
+        "y": 6.37069508090514
       },
       "prevControl": {
-        "x": 7.251124648630745,
-        "y": 6.604911811820771
+        "x": 5.599896695675553,
+        "y": 6.37069508090514
       },
       "nextControl": {
-        "x": 10.319652936024845,
-        "y": 6.604911811820771
+        "x": 8.668424983069656,
+        "y": 6.37069508090514
       },
       "isLocked": false,
       "linkedName": null
     },
     {
       "anchor": {
-        "x": 9.617002743277954,
-        "y": 4.028527771748839
+        "x": 8.000907299960106,
+        "y": 4.731177964495728
       },
       "prevControl": {
-        "x": 9.683101973466172,
-        "y": 5.469490989852009
+        "x": 8.379875657413981,
+        "y": 5.886569298196564
       },
       "nextControl": {
-        "x": 9.558448560549047,
-        "y": 2.752046588258654
+        "x": 7.520763001583064,
+        "y": 3.26732339627304
       },
       "isLocked": false,
       "linkedName": null
     },
     {
       "anchor": {
-        "x": 8.19999152123839,
-        "y": 1.5341195874973776
+        "x": 5.131752346243635,
+        "y": 1.5575412605889405
       },
       "prevControl": {
-        "x": 10.167412060929687,
-        "y": 1.4872762413142506
+        "x": 7.099172885934942,
+        "y": 1.5106979144058135
       },
       "nextControl": {
-        "x": 6.232570981547093,
-        "y": 1.5809629336805047
+        "x": 3.1643318065523385,
+        "y": 1.6043846067720675
       },
       "isLocked": false,
       "linkedName": null
@@ -112,8 +112,8 @@
   "constraintZones": [],
   "eventMarkers": [
     {
-      "name": "override_heading",
-      "waypointRelativePos": 4.050000000000001,
+      "name": "New Event Marker",
+      "waypointRelativePos": 2.9,
       "command": {
         "type": "parallel",
         "data": {
@@ -121,7 +121,24 @@
             {
               "type": "named",
               "data": {
-                "name": "override_heading"
+                "name": "override_heading_gp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "New Event Marker",
+      "waypointRelativePos": 4.45,
+      "command": {
+        "type": "parallel",
+        "data": {
+          "commands": [
+            {
+              "type": "named",
+              "data": {
+                "name": "override_heading_goal"
               }
             }
           ]

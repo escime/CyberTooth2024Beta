@@ -3,7 +3,8 @@ import math
 from commands2 import Command, Subsystem, sysid
 from phoenix6 import swerve, units, utils, SignalLogger, orchestra
 from typing import Callable, overload
-from wpilib import DriverStation, Notifier, RobotController
+from wpilib import DriverStation, Notifier, RobotController, SmartDashboard
+from wpiutil import Sendable, SendableBuilder
 from wpilib.sysid import SysIdRoutineLog
 from wpimath.geometry import Rotation2d, Pose2d, Translation2d
 from pathplannerlib.auto import AutoBuilder, HolonomicPathFollowerConfig, ReplanningConfig
@@ -13,6 +14,7 @@ from pathplannerlib.path import PathPlannerPath, PathConstraints, GoalEndState
 from pathplannerlib.commands import PathfindHolonomic
 from constants import AutoConstants
 from ntcore import NetworkTableInstance
+import types
 
 
 class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
@@ -122,7 +124,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.odo_ll_table = NetworkTableInstance.getDefault().getTable("limelight")
         self.gp_ll_table = NetworkTableInstance.getDefault().getTable("limelight-gp")
         self.gp_ll_gp_mode = True
-        self.tx = 0
+        self.tx = 0.0
+        self.set_vision_measurement_std_devs((0.7, 0.7, 9999999))
 
         self.pathplanner_rotation_overridden = False
         self.configure_pathplanner()
@@ -138,6 +141,11 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.ax = 0
         self.ay = 0
         self.alpha = 0
+
+        # Setup swerve drive widget
+        # sds = Sendable()
+        # sds.initSendable = types.MethodType(self.initSendable, sds)
+        # SmartDashboard.putData("Swerve Drive", sds)
 
         # Setup Orchestra.
         self.orchestra = orchestra.Orchestra()
@@ -180,6 +188,34 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                 self
             )
         )
+
+    # def set_none(self, value: float) -> None:
+    #     value += 1
+
+    # def initSendable(self, builder: SendableBuilder) -> None:
+    #     builder.setSmartDashboardType("SwerveDrive")
+    #     builder.addDoubleProperty("Front Left Angle",
+    #                               lambda: self.modules[0].steer_motor.get_position().value_as_double, self.set_none)
+    #     builder.addDoubleProperty("Front Left Velocity",
+    #                               lambda: self.modules[0].drive_motor.get_velocity().value_as_double, self.set_none)
+    #     builder.addDoubleProperty("Front Right Angle",
+    #                               lambda: self.modules[1].steer_motor.get_position().value_as_double,
+    #                               self.set_none)
+    #     builder.addDoubleProperty("Front Right Velocity",
+    #                               lambda: self.modules[1].drive_motor.get_velocity().value_as_double,
+    #                               self.set_none)
+    #     builder.addDoubleProperty("Back Left Angle", lambda: self.modules[2].steer_motor.get_position().value_as_double,
+    #                               self.set_none)
+    #     builder.addDoubleProperty("Back Left Velocity",
+    #                               lambda: self.modules[2].drive_motor.get_velocity().value_as_double,
+    #                               self.set_none)
+    #     builder.addDoubleProperty("Back Right Angle",
+    #                               lambda: self.modules[3].steer_motor.get_position().value_as_double,
+    #                               self.set_none)
+    #     builder.addDoubleProperty("Back Right Velocity",
+    #                               lambda: self.modules[3].drive_motor.get_velocity().value_as_double,
+    #                               self.set_none)
+    #     builder.addDoubleProperty("Robot Angle", lambda: self.get_pose().rotation().radians(), self.set_none)
 
     def apply_request(self, request: Callable[[], swerve.requests.SwerveRequest]) -> Command:
         """
@@ -224,24 +260,24 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.vy_old = self.vy_new
         self.omega_old = self.omega_new
         self.loop_time = utils.get_current_time_seconds()
+        SmartDashboard.putNumber("Robot Linear Speed", math.sqrt((self.vx_new * self.vx_new) + (self.vy_new * self.vy_new)))
 
     def limelight_periodic(self) -> None:
         """Fuses limelight data with the pose estimator."""
         self.odo_ll_table.putNumberArray("robot_orientation_set",
                                          [self.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
-        if not self.gp_ll_gp_mode:
-            self.gp_ll_table.putNumberArray("robot_orientation_set",
-                                            [self.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
 
         odo_ll_botpose = self.odo_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0,
                                                                                            0.0, 0.0, 0.0, 0.0,
                                                                                            0.0, 0.0, 0.0, 0.0])
         if not self.gp_ll_gp_mode:
+            self.gp_ll_table.putNumberArray("robot_orientation_set",
+                                            [self.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
+
             gp_ll_botpose = self.gp_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0,
                                                                                              0.0, 0.0, 0.0, 0.0,
                                                                                              0.0, 0.0, 0.0, 0.0])
-        if not self.gp_ll_gp_mode:
-            if odo_ll_botpose[9] < gp_ll_botpose[9] < 20 and odo_ll_botpose[7] >= 1:
+            if odo_ll_botpose[9] < gp_ll_botpose[9] < 10 and odo_ll_botpose[7] >= 1:
                 self.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]),
                                                    Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
                                             utils.get_current_time_seconds() - (odo_ll_botpose[6]))
@@ -250,10 +286,13 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                                                    Rotation2d.fromDegrees((gp_ll_botpose[5] + 360) % 360)),
                                             utils.get_current_time_seconds() - (gp_ll_botpose[6]))
         else:
-            if odo_ll_botpose[9] and odo_ll_botpose[7] >= 1:
+            if odo_ll_botpose[9] < 10 and odo_ll_botpose[7] >= 1:
+                SmartDashboard.putBoolean("Valid AprilTag Detected?", True)
                 self.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]),
                                                    Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
                                             utils.get_current_time_seconds() - (odo_ll_botpose[6]))
+            else:
+                SmartDashboard.putBoolean("Valid AprilTag Detected?", False)
             if self.gp_ll_table.getEntry("tv").getDouble(-1) == 1:
                 self.tx = self.gp_ll_table.getEntry("tx").getDouble(0)
 
@@ -351,10 +390,15 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
     def pathplanner_rotation_override(self) -> Rotation2d:
         """Provides the overridden heading in the event the override has been toggled. Returns None if override is
         disabled, which is the default."""
-        if self.pathplanner_rotation_overridden:
+        if self.pathplanner_rotation_overridden == "goal":
             return Rotation2d.fromDegrees(self.get_goal_alignment_heading())
+        elif self.pathplanner_rotation_overridden == "gp":
+            return Rotation2d.fromDegrees(self.get_gp_alignment_heading())
         else:
             return None
+
+    def get_gp_alignment_heading(self) -> float:
+        return self.get_pose().rotation().degrees() + self.tx
 
     def get_goal_alignment_heading(self) -> float:
         """Returns the required target heading to point at a goal."""
@@ -363,7 +407,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         else:
             return self.get_auto_lookahead_heading([0, 5.53], 0.3)
 
-    def set_pathplanner_rotation_override(self, override: bool) -> None:
+    def set_pathplanner_rotation_override(self, override: str) -> None:
         """Sets whether pathplanner uses an alternate heading controller."""
         self.pathplanner_rotation_overridden = override
 
@@ -379,6 +423,9 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
     def play_sound(self) -> None:
         """Plays a sound on all drivetrain Krakens."""
         self.orchestra.play()
+
+    def get_gp_in_view(self) -> bool:
+        return self.gp_ll_table.getEntry("tv").getDouble(-1) == 1
 
     def get_auto_target_heading(self, target: [float, float]) -> float:
         """Acquires the target heading required to point at a goal."""
@@ -416,3 +463,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
             target_pose=target_pose,
             goal_end_vel=0
         )
+
+    def get_close_to_target(self, target: [float, float], good_range: float) -> bool:
+        pose = [self.get_pose().x, self.get_pose().y]
+        c = math.sqrt(((target[0] - pose[0]) * (target[0] - pose[0])) + ((target[1] - pose[1]) * (target[1] - pose[1])))
+        return good_range >= c

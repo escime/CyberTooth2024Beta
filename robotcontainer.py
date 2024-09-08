@@ -98,11 +98,24 @@ class RobotContainer:
 
         # Setup autonomous selector on the dashboard. ------------------------------------------------------------------
         self.m_chooser = SendableChooser()
-        self.auto_names = ["Test", "TestChoreo", "Baseline", "CheckDrivetrain", "FourNote", "IntakeSetup"]
+        self.auto_names = ["Test", "TestChoreo", "Baseline", "CheckDrivetrain", "FourNote", "BuildPlay"]
         self.m_chooser.setDefaultOption("DoNothing", "DoNothing")
         for x in self.auto_names:
             self.m_chooser.addOption(x, x)
         SmartDashboard.putData("Auto Select", self.m_chooser)
+
+        self.m_auto_start_location = SendableChooser()
+        self.m_auto_start_location.setDefaultOption("A", "A")
+        self.m_auto_start_location.addOption("B", "B")
+        self.m_auto_start_location.addOption("C", "C")
+        self.m_auto_num_gp = SendableChooser()
+        self.m_auto_num_gp.setDefaultOption("1", "1")
+        self.m_auto_num_gp.addOption("2", "2")
+        self.m_auto_num_gp.addOption("3", "3")
+        self.m_auto_num_gp.addOption("4", "4")
+        self.m_auto_num_gp.addOption("5", "5")
+        SmartDashboard.putData("Auto Start Selector", self.m_auto_start_location)
+        SmartDashboard.putData("Auto GP Num Selector", self.m_auto_num_gp)
 
     def configureTriggersDefault(self) -> None:
         """Used to set up any commands that trigger when a measured event occurs."""
@@ -240,7 +253,7 @@ class RobotContainer:
             runOnce(lambda: self.arm.set_state("stow"), self.arm))
 
         # Cube acquired light
-        button.Trigger(lambda: self.arm.get_sensor_on()).onTrue(
+        button.Trigger(lambda: self.arm.get_sensor_on() and DriverStation.isTeleop()).onTrue(
             SequentialCommandGroup(
                 runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
                 runOnce(lambda: self.leds.set_flash_color_color([0, 255, 0]), self.leds),
@@ -249,7 +262,7 @@ class RobotContainer:
                 runOnce(lambda: self.leds.set_state("gp_held"), self.leds)
             ).ignoringDisable(True)
         )
-        button.Trigger(lambda: self.arm.get_sensor_on()).onFalse(
+        button.Trigger(lambda: self.arm.get_sensor_on() and DriverStation.isTeleop()).onFalse(
             SequentialCommandGroup(
                 runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
                 runOnce(lambda: self.leds.set_flash_color_color([255, 0, 0]), self.leds),
@@ -259,8 +272,36 @@ class RobotContainer:
             ).ignoringDisable(True)
         )
 
+        # Temporary "drive to game piece" command
         button.Trigger(lambda: self.driver_controller.get_button("X")).whileTrue(
             DriveToGamePiece(self.drivetrain, self.arm))
+
+        # Vibrate the controller when a game piece is in view
+        button.Trigger(lambda: self.drivetrain.get_gp_in_view()).onTrue(
+            runOnce(lambda: self.driver_controller.set_rumble(1)).ignoringDisable(False)).onFalse(
+            runOnce(lambda: self.driver_controller.set_rumble(0)).ignoringDisable(True))
+
+        # When the robot is near the subwoofer, set an LED notifier about it
+        button.Trigger(lambda: self.drivetrain.get_close_to_target([15, 5.53], 2.5) and
+                       DriverStation.isTeleop()).onTrue(
+            runOnce(lambda: self.leds.set_notifier((0, 0, 255)), self.leds)
+        ).onFalse(
+            runOnce(lambda: self.leds.set_notifier([-1, -1, -1]), self.leds)
+        )
+
+        # Match time notifications
+        button.Trigger(lambda: DriverStation.getMatchTime() <= 20).onTrue(
+            runOnce(lambda: self.leds.set_notifier((0, 255, 0)), self.leds)
+        )
+        button.Trigger(lambda: DriverStation.getMatchTime() <= 10).onTrue(
+            runOnce(lambda: self.leds.set_notifier((255, 255, 0)), self.leds)
+        )
+        button.Trigger(lambda: DriverStation.getMatchTime() <= 5).onTrue(
+            runOnce(lambda: self.leds.set_notifier((255, 0, 0)), self.leds)
+        )
+        button.Trigger(lambda: DriverStation.getMatchTime() <= 0.01).onTrue(
+            runOnce(lambda: self.leds.set_notifier([-1, -1, -1]), self.leds).ignoringDisable(True)
+        )
 
         # Configuration for telemetry.
         if utils.is_simulation():
@@ -273,6 +314,13 @@ class RobotContainer:
         """
         if self.m_chooser.getSelected() == "DoNothing":
             return None
+        elif self.m_chooser.getSelected() == "BuildPlay":
+            try:
+                selected_auto = PathPlannerAuto(self.m_auto_start_location.getSelected() + "_Score" +
+                                                self.m_auto_num_gp.getSelected())
+            except FileNotFoundError:
+                selected_auto = None
+            return selected_auto
         else:
             selected_auto = None
             for y in self.auto_names:
@@ -390,10 +438,12 @@ class RobotContainer:
                                                               self.leds))
         NamedCommands.registerCommand("baseline", Baseline(self.drivetrain, self.timer))
         NamedCommands.registerCommand("check_drivetrain", CheckDrivetrain(self.drivetrain, self.timer))
-        NamedCommands.registerCommand("override_heading",
-                                      runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override(True)))
+        NamedCommands.registerCommand("override_heading_goal",
+                                      runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override("goal")))
+        NamedCommands.registerCommand("override_heading_gp",
+                                      runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override("gp")))
         NamedCommands.registerCommand("disable_override_heading",
-                                      runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override(False)))
+                                      runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override("none")))
         NamedCommands.registerCommand("intake", runOnce(lambda: self.arm.set_state("intake"),
                                                         self.arm))
         NamedCommands.registerCommand("stow", runOnce(lambda: self.arm.set_state("stow"), self.arm))

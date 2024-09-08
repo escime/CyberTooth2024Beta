@@ -1,6 +1,6 @@
 from commands2 import Command, CommandScheduler, TimedCommandRobot
 from robotcontainer import RobotContainer
-from wpilib import run, RobotBase
+from wpilib import run, RobotBase, SmartDashboard, RobotController
 from phoenix6 import SignalLogger
 
 
@@ -18,6 +18,7 @@ class Robot(TimedCommandRobot):
     def robotPeriodic(self) -> None:
         """Set the constant robot periodic state (in command based, that's just run the scheduler loop)"""
         CommandScheduler.getInstance().run()
+        SmartDashboard.putNumber("Robot Voltage", RobotController.getBatteryVoltage())
 
     def disabledInit(self) -> None:
         """Nothing is written here yet. Probably will not modify unless something is required for end-of-match."""

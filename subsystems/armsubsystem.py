@@ -1,9 +1,11 @@
+import phoenix6.utils
 from commands2 import Subsystem
 
 from phoenix6.hardware import TalonFX
 from phoenix6.controls import MotionMagicVoltage, VoltageOut
 from phoenix6.configs import TalonFXConfiguration
 from phoenix6.status_code import StatusCode
+from phoenix6.signals import InvertedValue
 from phoenix6.utils import get_current_time_seconds, is_simulation
 
 from rev import CANSparkMax
@@ -20,7 +22,7 @@ class ArmSubsystem(Subsystem):
     def __init__(self):
         super().__init__()
         self._last_sim_time = get_current_time_seconds()
-        self.state_values = {"stow": 0, "intake": 0.49, "shoot": 0.4, "reverse_shoot": 0.2}
+        self.state_values = {"stow": 0, "intake": 0.49, "shoot": 0.4, "reverse_shoot": 0.1}
         self.state = "stow"
 
         self.elbow = TalonFX(30, "rio")
@@ -33,6 +35,10 @@ class ArmSubsystem(Subsystem):
         self.elbow_configs.current_limits.stator_current_limit_enable = True
         self.elbow_gear_ratio = 20.8
         self.elbow_configs.feedback.sensor_to_mechanism_ratio = self.elbow_gear_ratio
+        if not phoenix6.utils.is_simulation():
+            self.elbow_configs.motor_output.inverted = InvertedValue.CLOCKWISE_POSITIVE
+        else:
+            self.elbow_configs.motor_output.inverted = InvertedValue.COUNTER_CLOCKWISE_POSITIVE
 
         self.elbow_mm_configs = self.elbow_configs.motion_magic
         self.elbow_mm_configs.motion_magic_cruise_velocity = 0.5
@@ -143,11 +149,11 @@ class ArmSubsystem(Subsystem):
 
         if self.state == "shoot" or self.state == "reverse_shoot":
             if self.get_at_target():
-                self.intake.setVoltage(-12)
+                self.intake.setVoltage(12)
         elif self.state == "intake" or self.get_sensor_on():
-            self.intake.setVoltage(10)
+            self.intake.setVoltage(-10)
         else:
-            self.intake.setVoltage(1)
+            self.intake.setVoltage(-1)
 
         SmartDashboard.putData("Arm M2D", self.arm_m2d)
-        SmartDashboard.putString("Elbow Position", str(self.elbow.get_position()))
+        SmartDashboard.putNumber("Elbow Position", self.elbow.get_position().value_as_double)
