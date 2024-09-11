@@ -4,7 +4,7 @@ from commands2 import Command, Subsystem, sysid
 from phoenix6 import swerve, units, utils, SignalLogger, orchestra
 from typing import Callable, overload
 from wpilib import DriverStation, Notifier, RobotController, SmartDashboard
-from wpiutil import Sendable, SendableBuilder
+# from wpiutil import Sendable, SendableBuilder
 from wpilib.sysid import SysIdRoutineLog
 from wpimath.geometry import Rotation2d, Pose2d, Translation2d
 from pathplannerlib.auto import AutoBuilder, HolonomicPathFollowerConfig, ReplanningConfig
@@ -14,7 +14,7 @@ from pathplannerlib.path import PathPlannerPath, PathConstraints, GoalEndState
 from pathplannerlib.commands import PathfindHolonomic
 from constants import AutoConstants
 from ntcore import NetworkTableInstance
-import types
+# import types
 
 
 class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
@@ -125,7 +125,6 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.gp_ll_table = NetworkTableInstance.getDefault().getTable("limelight-gp")
         self.gp_ll_gp_mode = True
         self.tx = 0.0
-        self.set_vision_measurement_std_devs((0.7, 0.7, 9999999))
 
         self.pathplanner_rotation_overridden = False
         self.configure_pathplanner()
@@ -290,7 +289,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                 SmartDashboard.putBoolean("Valid AprilTag Detected?", True)
                 self.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]),
                                                    Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
-                                            utils.get_current_time_seconds() - (odo_ll_botpose[6]))
+                                            utils.get_current_time_seconds() - (odo_ll_botpose[6] / 1000.0),
+                                            (0.2, 0.2, 999999999))
             else:
                 SmartDashboard.putBoolean("Valid AprilTag Detected?", False)
             if self.gp_ll_table.getEntry("tv").getDouble(-1) == 1:

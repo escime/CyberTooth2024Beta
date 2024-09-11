@@ -125,9 +125,9 @@ class RobotContainer:
             self.drivetrain.apply_request(
                 lambda: (
                     self._drive.with_velocity_x(
-                        -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
-                    .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
-                    .with_rotational_rate(-self.driver_controller.get_axis("RY", 0.05) * self._max_angular_rate)
+                        -self.driver_controller.slew_axis("LY", 0.05) * self._max_speed)
+                    .with_velocity_y(-self.driver_controller.slew_axis("LX", 0.01) * self._max_speed)
+                    .with_rotational_rate(-self.driver_controller.get_axis("RY", 0.01) * self._max_angular_rate)
                 )
             )
         )
@@ -302,6 +302,21 @@ class RobotContainer:
         button.Trigger(lambda: DriverStation.getMatchTime() <= 0.01).onTrue(
             runOnce(lambda: self.leds.set_notifier([-1, -1, -1]), self.leds).ignoringDisable(True)
         )
+
+        button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings and
+                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.drivetrain.seed_field_relative(Pose2d(15.19, 5.55, Rotation2d.fromDegrees(180))),
+                        self.drivetrain),
+                runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(180)))
+            ))
+        button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings and
+                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.drivetrain.seed_field_relative(Pose2d(15.19, 5.55, Rotation2d.fromDegrees(0))),
+                        self.drivetrain),
+                runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(0)))
+            ))
 
         # Configuration for telemetry.
         if utils.is_simulation():

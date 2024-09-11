@@ -153,7 +153,7 @@ class ArmSubsystem(Subsystem):
         elif self.state == "intake" or self.get_sensor_on():
             self.intake.setVoltage(-10)
         else:
-            self.intake.setVoltage(-1)
+            self.intake.setVoltage(-0.5)
 
         SmartDashboard.putData("Arm M2D", self.arm_m2d)
         SmartDashboard.putNumber("Elbow Position", self.elbow.get_position().value_as_double)

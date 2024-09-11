@@ -42,7 +42,7 @@ class TunerConstants:
         configs.TalonFXConfiguration()
             .with_current_limits(
                 configs.CurrentLimitsConfigs()
-                    .with_stator_current_limit(100)
+                    .with_stator_current_limit(70)
                     .with_stator_current_limit_enable(True)
         )
     )
@@ -52,7 +52,7 @@ class TunerConstants:
                 configs.CurrentLimitsConfigs()
                     # Swerve azimuth does not require much torque output, so we can set a relatively low
                     # stator current limit to help avoid brownouts without impacting performance.
-                    .with_stator_current_limit(60)
+                    .with_stator_current_limit(40)
                     .with_stator_current_limit_enable(True)
             )
     )

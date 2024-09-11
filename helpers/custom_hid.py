@@ -19,7 +19,10 @@ class CustomHID:
             self.controller = Joystick(port)
             self.controller_type = "generic"
 
-        self.slew_limiter = SlewRateLimiter(0.5, 0, 0)
+        self.slew_limiter_lx = SlewRateLimiter(3, -3, 0)
+        self.slew_limiter_ly = SlewRateLimiter(3, -3, 0)
+        self.slew_limiter_rx = SlewRateLimiter(3, -3, 0)
+        self.slew_limiter_ry = SlewRateLimiter(3, -3, 0)
 
     def reset_controller(self, hid, port):
         if hid == "xbox":
@@ -238,5 +241,23 @@ class CustomHID:
         """Modification of get_trigger() that refines its output between a maximum and a minimum value"""
         return (1 - self.get_trigger_raw(trigger, deadband)) * (maxi - mini) + mini
 
-    def slew_axis(self, axis: str, threshold: float) -> float:
-        return 0  # does nothing for now
+    def slew_axis(self, axis: str, deadband: float) -> float:
+        """Equivalent of get_axis but with an integrated slew rate limiter."""
+        value = 0.0
+        if axis == "LX":
+            if abs(self.controller.getRawAxis(0)) >= deadband:
+                value = self.controller.getRawAxis(0)
+            value = self.slew_limiter_lx.calculate(value)
+        if axis == "LY":
+            if abs(self.controller.getRawAxis(1)) >= deadband:
+                value = self.controller.getRawAxis(1)
+            value = self.slew_limiter_ly.calculate(value)
+        if axis == "RY":
+            if abs(self.controller.getRawAxis(4)) >= deadband:
+                value = self.controller.getRawAxis(4)
+            value = self.slew_limiter_ry.calculate(value)
+        if axis == "RX":
+            if abs(self.controller.getRawAxis(5)) >= deadband:
+                value = self.controller.getRawAxis(5)
+            value = self.slew_limiter_rx.calculate(value)
+        return value

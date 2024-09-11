@@ -34,7 +34,8 @@ class DriveToGamePiece(Command):
             rotate_output = rotationsToRadians(0.75)
         elif rotate_output < -1 * rotationsToRadians(0.75):
             rotate_output = -1 * rotationsToRadians(0.75)
-        self.drive.apply_request(lambda: self.drive_request.with_rotational_rate(rotate_output)).schedule()
+        if self.arm.get_at_target():
+            self.drive.apply_request(lambda: self.drive_request.with_rotational_rate(rotate_output)).schedule()
 
         if self.arm.get_sensor_on():
             self.gp_acquired[0] = True
