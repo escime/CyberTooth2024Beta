@@ -24,6 +24,7 @@ from commands.baseline import Baseline
 from commands.check_drivetrain import CheckDrivetrain
 from commands.alignment_leds import AlignmentLEDs
 from commands.drive_to_gamepiece import DriveToGamePiece
+from commands.drive_aligned import DriveAligned
 
 
 class RobotContainer:
@@ -180,10 +181,13 @@ class RobotContainer:
                     .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
                     .with_target_direction(Rotation2d.fromDegrees(self.driver_controller.dir_est_ctrl("R"))))))
 
-        # reset the field-centric heading on Y
-        button.Trigger(lambda: self.driver_controller.get_button("Y") and not self.test_bindings)\
-            .onTrue(self.drivetrain.runOnce(
-                lambda: self.drivetrain.seed_field_relative()))
+        # button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings).whileTrue(
+        #     self.drivetrain.apply_request(
+        #         lambda: (
+        #             self._hold_heading.with_velocity_x(
+        #                 -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
+        #             .with_velocity_y(0)
+        #             .with_target_direction(Rotation2d.fromDegrees(-135)))))
 
         # Play affirmative sound on Krakens.
         # button.Trigger(lambda: self.driver_controller.get_button("LB") and not self.test_bindings).onTrue(
@@ -191,32 +195,52 @@ class RobotContainer:
         #         runOnce(lambda: self.drivetrain.load_sound("affirmative"), self.drivetrain),
         #         runOnce(lambda: self.drivetrain.play_sound(), self.drivetrain)))
 
-        # Pathfind to the speaker
+        # Auto score in speaker
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
+                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue and
+                       self.drivetrain.get_close_to_target([15, 5.53], 2.5)).onTrue(
             SequentialCommandGroup(
                 runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([1.5, 5.53, 180]),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)))
+                self.drivetrain.pathfind_to_pose([1.5, 5.53, 0]),
+                runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm),
+                WaitCommand(0.75),
+                runOnce(lambda: self.arm.set_state("stow"), self.arm),
+                runOnce(lambda: self.leds.set_state("default"), self.leds)
+            )
+        )
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
+                       DriverStation.getAlliance() == DriverStation.Alliance.kRed and
+                       self.drivetrain.get_close_to_target([15, 5.53], 2.5)).onTrue(
             SequentialCommandGroup(
                 runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([15, 5.53, 0]),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)))
+                self.drivetrain.pathfind_to_pose([15, 5.53, 180]),
+                runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm),
+                WaitCommand(0.75),
+                runOnce(lambda: self.arm.set_state("stow"), self.arm),
+                runOnce(lambda: self.leds.set_state("default"), self.leds)
+            )
+        )
 
-        # Pathfind to the amp
+        # Auto score in the amp
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
+                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue and
+                       self.drivetrain.get_close_to_target([15, 5.53], 2.5)).onTrue(
             SequentialCommandGroup(
                 runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([1.86, 7.64, 90]),
+                self.drivetrain.pathfind_to_pose([1.86, 7.64, -90]),
+                runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm),
+                WaitCommand(0.75),
+                runOnce(lambda: self.arm.set_state("stow"), self.arm),
                 runOnce(lambda: self.leds.set_state("default"), self.leds)))
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
+                       DriverStation.getAlliance() == DriverStation.Alliance.kRed and
+                       self.drivetrain.get_close_to_target([15, 5.53], 2.5)).onTrue(
             SequentialCommandGroup(
                 runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([14.71, 7.64, 90]),
+                self.drivetrain.pathfind_to_pose([14.71, 7.64, -90]),
+                runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm),
+                WaitCommand(0.75),
+                runOnce(lambda: self.arm.set_state("stow"), self.arm),
                 runOnce(lambda: self.leds.set_state("default"), self.leds)))
 
         # Pathfind to the source
@@ -303,20 +327,24 @@ class RobotContainer:
             runOnce(lambda: self.leds.set_notifier([-1, -1, -1]), self.leds).ignoringDisable(True)
         )
 
-        button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings and
+        button.Trigger(lambda: self.driver_controller.get_button("Y") and not self.test_bindings and
                        DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
             SequentialCommandGroup(
                 runOnce(lambda: self.drivetrain.seed_field_relative(Pose2d(15.19, 5.55, Rotation2d.fromDegrees(180))),
                         self.drivetrain),
                 runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(180)))
             ))
-        button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings and
+        button.Trigger(lambda: self.driver_controller.get_button("Y") and not self.test_bindings and
                        DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
             SequentialCommandGroup(
-                runOnce(lambda: self.drivetrain.seed_field_relative(Pose2d(15.19, 5.55, Rotation2d.fromDegrees(0))),
+                runOnce(lambda: self.drivetrain.seed_field_relative(Pose2d(1.5, 5.55, Rotation2d.fromDegrees(0))),
                         self.drivetrain),
                 runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(0)))
             ))
+
+        button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings).whileTrue(
+            DriveAligned(self.drivetrain, [16.14, 4.86], self.driver_controller)
+        )
 
         # Configuration for telemetry.
         if utils.is_simulation():

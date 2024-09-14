@@ -24,6 +24,8 @@ class CustomHID:
         self.slew_limiter_rx = SlewRateLimiter(3, -3, 0)
         self.slew_limiter_ry = SlewRateLimiter(3, -3, 0)
 
+        self.dir_est_ctrl_origin_needed = True
+
     def reset_controller(self, hid, port):
         if hid == "xbox":
             self.controller = XboxController(port)
@@ -236,6 +238,17 @@ class CustomHID:
                 self.direction += 360
         # print("DIRECTION: " + str(self.direction))
         return self.direction
+
+    def dir_est_ctrl_origin(self, stick: str, start_heading: float):
+        if self.dir_est_ctrl_origin_needed:
+            self.direction = start_heading
+            self.dir_est_ctrl_origin_needed = False
+        else:
+            self.dir_est_ctrl(stick)
+        return self.direction
+
+    def reset_dir_est_ctrl_origin_needed(self):
+        self.dir_est_ctrl_origin_needed = True
 
     def refine_trigger(self, trigger: str, deadband: float, maxi: float, mini: float) -> float:
         """Modification of get_trigger() that refines its output between a maximum and a minimum value"""

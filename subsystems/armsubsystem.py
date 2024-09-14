@@ -22,7 +22,7 @@ class ArmSubsystem(Subsystem):
     def __init__(self):
         super().__init__()
         self._last_sim_time = get_current_time_seconds()
-        self.state_values = {"stow": 0, "intake": 0.49, "shoot": 0.4, "reverse_shoot": 0.1}
+        self.state_values = {"stow": 0, "intake": 0.49, "shoot": 0.32, "reverse_shoot": 0.1}
         self.state = "stow"
 
         self.elbow = TalonFX(30, "rio")
