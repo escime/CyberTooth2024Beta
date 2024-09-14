@@ -343,7 +343,7 @@ class RobotContainer:
             ))
 
         button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings).whileTrue(
-            DriveAligned(self.drivetrain, [16.14, 4.86], self.driver_controller)
+            DriveAligned(self.drivetrain, [16.14, 4.86], -90.0001, self.driver_controller)
         )
 
         # Configuration for telemetry.
