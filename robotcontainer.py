@@ -134,25 +134,25 @@ class RobotContainer:
         )
 
         # Slow Mode
-        button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1)).whileTrue(
-            self.drivetrain.apply_request(
-                lambda: (
-                    self._drive.with_velocity_x(
-                        -self.driver_controller.get_axis("LY", 0.05) * self._max_speed *
-                        self.driver_controller.refine_trigger("R", 0.1, 0.9, 0.5))
-                    .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) *
-                                     self._max_speed * self.driver_controller.refine_trigger("R",
-                                                                                             0.1,
-                                                                                             0.9,
-                                                                                             0.5))
-                    .with_rotational_rate(-self.driver_controller.get_axis("RY", 0.05) *
-                                          self._max_angular_rate * self.driver_controller.refine_trigger("R",
-                                                                                                         0.1,
-                                                                                                         0.9,
-                                                                                                         0.5))
-                )
-            )
-        )
+        # button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1)).whileTrue(
+        #     self.drivetrain.apply_request(
+        #         lambda: (
+        #             self._drive.with_velocity_x(
+        #                 -self.driver_controller.get_axis("LY", 0.05) * self._max_speed *
+        #                 self.driver_controller.refine_trigger("R", 0.1, 0.9, 0.5))
+        #             .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) *
+        #                              self._max_speed * self.driver_controller.refine_trigger("R",
+        #                                                                                      0.1,
+        #                                                                                      0.9,
+        #                                                                                      0.5))
+        #             .with_rotational_rate(-self.driver_controller.get_axis("RY", 0.05) *
+        #                                   self._max_angular_rate * self.driver_controller.refine_trigger("R",
+        #                                                                                                  0.1,
+        #                                                                                                  0.9,
+        #                                                                                                  0.5))
+        #         )
+        #     )
+        # )
 
         # Brake
         # button.Trigger(lambda: self.driver_controller.get_button("A") and not self.test_bindings).whileTrue(
@@ -180,14 +180,6 @@ class RobotContainer:
                         -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
                     .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
                     .with_target_direction(Rotation2d.fromDegrees(self.driver_controller.dir_est_ctrl("R"))))))
-
-        # button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings).whileTrue(
-        #     self.drivetrain.apply_request(
-        #         lambda: (
-        #             self._hold_heading.with_velocity_x(
-        #                 -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
-        #             .with_velocity_y(0)
-        #             .with_target_direction(Rotation2d.fromDegrees(-135)))))
 
         # Play affirmative sound on Krakens.
         # button.Trigger(lambda: self.driver_controller.get_button("LB") and not self.test_bindings).onTrue(
@@ -223,8 +215,7 @@ class RobotContainer:
 
         # Auto score in the amp
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue and
-                       self.drivetrain.get_close_to_target([15, 5.53], 2.5)).onTrue(
+                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
             SequentialCommandGroup(
                 runOnce(lambda: self.leds.set_state("flames"), self.leds),
                 self.drivetrain.pathfind_to_pose([1.86, 7.64, -90]),
@@ -233,8 +224,7 @@ class RobotContainer:
                 runOnce(lambda: self.arm.set_state("stow"), self.arm),
                 runOnce(lambda: self.leds.set_state("default"), self.leds)))
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kRed and
-                       self.drivetrain.get_close_to_target([15, 5.53], 2.5)).onTrue(
+                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
             SequentialCommandGroup(
                 runOnce(lambda: self.leds.set_state("flames"), self.leds),
                 self.drivetrain.pathfind_to_pose([14.71, 7.64, -90]),
@@ -305,14 +295,6 @@ class RobotContainer:
             runOnce(lambda: self.driver_controller.set_rumble(1)).ignoringDisable(False)).onFalse(
             runOnce(lambda: self.driver_controller.set_rumble(0)).ignoringDisable(True))
 
-        # When the robot is near the subwoofer, set an LED notifier about it
-        button.Trigger(lambda: self.drivetrain.get_close_to_target([15, 5.53], 2.5) and
-                       DriverStation.isTeleop()).onTrue(
-            runOnce(lambda: self.leds.set_notifier((0, 0, 255)), self.leds)
-        ).onFalse(
-            runOnce(lambda: self.leds.set_notifier([-1, -1, -1]), self.leds)
-        )
-
         # Match time notifications
         button.Trigger(lambda: DriverStation.getMatchTime() <= 20).onTrue(
             runOnce(lambda: self.leds.set_notifier((0, 255, 0)), self.leds)
@@ -342,8 +324,9 @@ class RobotContainer:
                 runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(0)))
             ))
 
-        button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings).whileTrue(
-            DriveAligned(self.drivetrain, [16.14, 4.86], -90.0001, self.driver_controller)
+        button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings and
+                       self.drivetrain.get_close_to_target([16.14, 4.86], 3.5)).whileTrue(
+            DriveAligned(self.drivetrain, [16.14, 4.86], 30, True, self.driver_controller)
         )
 
         # Configuration for telemetry.

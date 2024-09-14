@@ -13,12 +13,13 @@ from wpilib import SmartDashboard
 
 
 class DriveAligned(Command):
-    def __init__(self, drive: CommandSwerveDrivetrain, target: [float, float], approach_angle: float, joystick: CustomHID):
+    def __init__(self, drive: CommandSwerveDrivetrain, target: [float, float], approach_angle: float, flipped: bool, joystick: CustomHID):
         super().__init__()
         self.drive = drive
         self.joystick = joystick
         self.target = target
         self.approach_angle = approach_angle
+        self.flipped = flipped
 
         self.forward_request = (swerve.requests.RobotCentric()
                                 .with_drive_request_type(swerve.SwerveModule.DriveRequestType.VELOCITY)
@@ -36,6 +37,9 @@ class DriveAligned(Command):
         b = current_pose.y - self.target[1]
 
         theta = radiansToDegrees(atan2(b, a))
+        if self.flipped:
+            theta += 180
+            x_move = x_move * -1
 
         rotate_output = self.rotate_controller.calculate(current_pose.rotation().degrees(), theta + 180)
         y_output = self.y_controller.calculate(self.get_vector_to_line(current_pose, self.approach_angle), 0)
@@ -90,10 +94,18 @@ class DriveAligned(Command):
 
     def get_vector_to_line(self, current_pose, alpha):
         xmin, ymin = self.get_closest_target_coordinates(current_pose, alpha)
-        if current_pose.x > xmin:
-            return -1 * self.get_distance_to_line(current_pose, alpha)
-        elif current_pose.x < xmin:
-            return self.get_distance_to_line(current_pose, alpha)
+        if not self.flipped:
+            if current_pose.x > xmin:
+                return -1 * self.get_distance_to_line(current_pose, alpha)
+            elif current_pose.x < xmin:
+                return self.get_distance_to_line(current_pose, alpha)
+            else:
+                return 0
         else:
-            return 0
+            if current_pose.x < xmin:
+                return -1 * self.get_distance_to_line(current_pose, alpha)
+            elif current_pose.x > xmin:
+                return self.get_distance_to_line(current_pose, alpha)
+            else:
+                return 0
 
