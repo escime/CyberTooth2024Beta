@@ -25,6 +25,7 @@ from commands.check_drivetrain import CheckDrivetrain
 from commands.alignment_leds import AlignmentLEDs
 from commands.drive_to_gamepiece import DriveToGamePiece
 from commands.drive_aligned import DriveAligned
+from commands.auto_alignment_leds import AutoAlignmentLEDs
 
 
 class RobotContainer:
@@ -117,6 +118,9 @@ class RobotContainer:
         self.m_auto_num_gp.addOption("5", "5")
         SmartDashboard.putData("Auto Start Selector", self.m_auto_start_location)
         SmartDashboard.putData("Auto GP Num Selector", self.m_auto_num_gp)
+
+        SmartDashboard.putBoolean("Misalignment Indicator Active?", False)
+        SmartDashboard.putNumber("Misalignment Angle", 0)
 
     def configureTriggersDefault(self) -> None:
         """Used to set up any commands that trigger when a measured event occurs."""
@@ -275,8 +279,7 @@ class RobotContainer:
                 WaitCommand(2),
                 runOnce(lambda: self.leds.set_state("gp_held"), self.leds)
             ).ignoringDisable(True)
-        )
-        button.Trigger(lambda: self.arm.get_sensor_on() and DriverStation.isTeleop()).onFalse(
+        ).onFalse(
             SequentialCommandGroup(
                 runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
                 runOnce(lambda: self.leds.set_flash_color_color([255, 0, 0]), self.leds),
@@ -324,9 +327,14 @@ class RobotContainer:
                 runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(0)))
             ))
 
-        button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings and
-                       self.drivetrain.get_close_to_target([16.14, 4.86], 3.5)).whileTrue(
+        (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
+            .whileTrue(
             DriveAligned(self.drivetrain, [16.14, 4.86], 30, True, self.driver_controller)
+        ))
+
+        button.Trigger(lambda: SmartDashboard.getBoolean("Misalignment Indicator Active?", False)).whileTrue(
+            AutoAlignmentLEDs(self.drivetrain, self.leds, self.m_auto_start_location.getSelected())
+            .ignoringDisable(True)
         )
 
         # Configuration for telemetry.

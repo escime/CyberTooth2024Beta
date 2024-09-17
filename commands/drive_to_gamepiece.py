@@ -17,6 +17,8 @@ class DriveToGamePiece(Command):
         self.arm = arm
         self.gp_acquired = [False] * 50
 
+        self.addRequirements(arm)
+
         self.drive_request = (swerve.requests.RobotCentric()
                               .with_drive_request_type(swerve.SwerveModule.DriveRequestType.VELOCITY)
                               .with_velocity_x(TunerConstants.speed_at_12_volts * 0.3)
