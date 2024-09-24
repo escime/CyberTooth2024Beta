@@ -414,7 +414,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
     def load_sound(self, sound: str) -> None:
         """Prepares drivetrain Krakens to play a sound."""
         if sound == "affirmative":
-            self.orchestra.load_music("affirmative.chrp")
+            self.orchestra.load_music("meme1.chrp")
         elif sound == "negative":
             self.orchestra.load_music("negative.chrp")
         else:

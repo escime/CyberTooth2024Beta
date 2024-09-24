@@ -31,7 +31,7 @@ class ArmSubsystem(Subsystem):
         self.elbow_mm = MotionMagicVoltage(0, enable_foc=False)
         self.elbow_configs = TalonFXConfiguration()
 
-        self.elbow_configs.current_limits.stator_current_limit = 80
+        self.elbow_configs.current_limits.stator_current_limit = 60
         self.elbow_configs.current_limits.stator_current_limit_enable = True
         self.elbow_gear_ratio = 20.8
         self.elbow_configs.feedback.sensor_to_mechanism_ratio = self.elbow_gear_ratio

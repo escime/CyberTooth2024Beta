@@ -32,7 +32,13 @@
         {
           "type": "path",
           "data": {
-            "pathName": "1-B"
+            "pathName": "B-3"
+          }
+        },
+        {
+          "type": "named",
+          "data": {
+            "name": "disable_override_heading"
           }
         },
         {
@@ -44,7 +50,7 @@
         {
           "type": "path",
           "data": {
-            "pathName": "B-1"
+            "pathName": "3-B"
           }
         },
         {

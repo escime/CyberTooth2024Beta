@@ -15,7 +15,7 @@ class DriveToGamePiece(Command):
         super().__init__()
         self.drive = drive
         self.arm = arm
-        self.gp_acquired = [False] * 50
+        self.gp_acquired = [False] * 3
 
         self.addRequirements(arm)
 
@@ -27,8 +27,15 @@ class DriveToGamePiece(Command):
         self.turn_controller = PIDController(0.05, 0, 0, 0.02)
         SmartDashboard.putData("Game Piece Tracking Controller", self.turn_controller)
 
+        self.started = False
+
     def initialize(self):
         self.arm.set_state("intake")
+        self.drive_request = (swerve.requests.RobotCentric()
+                              .with_drive_request_type(swerve.SwerveModule.DriveRequestType.VELOCITY)
+                              .with_velocity_x(TunerConstants.speed_at_12_volts * 0.3)
+                              .with_velocity_y(0))
+        self.started = False
 
     def execute(self):
         rotate_output = self.turn_controller.calculate(self.drive.tx, 0)
@@ -36,7 +43,9 @@ class DriveToGamePiece(Command):
             rotate_output = rotationsToRadians(0.75)
         elif rotate_output < -1 * rotationsToRadians(0.75):
             rotate_output = -1 * rotationsToRadians(0.75)
-        if self.arm.get_at_target():
+        if not self.started and self.drive.get_gp_in_view():
+            self.started = True
+        if self.arm.get_at_target() and self.started:
             self.drive.apply_request(lambda: self.drive_request.with_rotational_rate(rotate_output)).schedule()
 
         if self.arm.get_sensor_on():
@@ -50,4 +59,6 @@ class DriveToGamePiece(Command):
 
     def end(self, interrupted: bool):
         self.arm.set_state("stow")
-        self.drive.apply_request(lambda: self.drive_request.with_rotational_rate(0)).withTimeout(0.02).schedule()
+        self.drive.apply_request(lambda: self.drive_request.with_rotational_rate(0)
+                                 .with_velocity_x(0)
+                                 .with_velocity_y(0)).withTimeout(0.02).schedule()

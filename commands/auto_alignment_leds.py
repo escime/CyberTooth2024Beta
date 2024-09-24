@@ -1,18 +1,21 @@
 from commands2 import Command
+from wpiutil import SendableBuilder
+
 from subsystems.command_swerve_drivetrain import CommandSwerveDrivetrain
 from subsystems.ledsubsystem import LEDs
-from wpilib import DriverStation
+from wpilib import DriverStation, SendableChooser
 from math import cos, sin, sqrt, copysign
 from wpimath.units import degreesToRadians
 from wpimath.geometry import Pose2d, Translation2d, Rotation2d
 
 
 class AutoAlignmentLEDs(Command):
-    def __init__(self, drive: CommandSwerveDrivetrain, leds: LEDs, starting_position: str):
+    def __init__(self, drive: CommandSwerveDrivetrain, leds: LEDs, selector: SendableChooser):
         super().__init__()
         self.leds = leds
         self.drive = drive
-        self.start = starting_position
+        self.start = "A"
+        self.selector = selector
 
         self.addRequirements(leds)
 
@@ -21,6 +24,7 @@ class AutoAlignmentLEDs(Command):
 
     def initialize(self):
         self.leds.set_state("align")
+        self.start = self.selector.getSelected()
         if DriverStation.getAlliance() == DriverStation.Alliance.kRed:
             alliance = "red"
         else:
@@ -40,7 +44,8 @@ class AutoAlignmentLEDs(Command):
         else:
             self.start_coords = [15.18, 5.55, 180, 90.0001]
 
-        self.drive.seed_field_relative(Pose2d(Translation2d(self.start_coords[0], self.start_coords[1]), Rotation2d.fromDegrees(self.start_coords[2])))
+        self.drive.seed_field_relative(Pose2d(Translation2d(self.start_coords[0], self.start_coords[1]),
+                                              Rotation2d.fromDegrees(self.start_coords[2])))
 
     def execute(self):
         misalignment = self.get_vector_to_line(self.drive.get_pose(), self.start_coords[3])

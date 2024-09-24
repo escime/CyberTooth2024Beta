@@ -6,6 +6,7 @@ from commands2 import Command, button, SequentialCommandGroup, ParallelCommandGr
 from constants import OIConstants
 from subsystems.ledsubsystem import LEDs
 from subsystems.armsubsystem import ArmSubsystem
+from subsystems.utilsubsystem import UtilSubsystem
 from wpilib import SmartDashboard, SendableChooser, DriverStation, DataLogManager, Timer
 from helpers.custom_hid import CustomHID
 from pathplannerlib.auto import NamedCommands, PathPlannerAuto
@@ -26,6 +27,7 @@ from commands.alignment_leds import AlignmentLEDs
 from commands.drive_to_gamepiece import DriveToGamePiece
 from commands.drive_aligned import DriveAligned
 from commands.auto_alignment_leds import AutoAlignmentLEDs
+from commands.grid_aligned import GridAligned
 
 
 class RobotContainer:
@@ -56,6 +58,7 @@ class RobotContainer:
         # Startup subsystems. ------------------------------------------------------------------------------------------
         self.leds = LEDs(self.timer)
         self.arm = ArmSubsystem()
+        self.util = UtilSubsystem()
 
         # Setup driver & operator controllers. -------------------------------------------------------------------------
         self.driver_controller = CustomHID(OIConstants.kDriverControllerPort, "xbox")
@@ -94,18 +97,7 @@ class RobotContainer:
         # Register commands for PathPlanner. ---------------------------------------------------------------------------
         self.registerCommands()
 
-        # Setup for all event-trigger commands. ------------------------------------------------------------------------
-        self.configureTriggersDefault()
-        self.configureTestBindings()
-
-        # Setup autonomous selector on the dashboard. ------------------------------------------------------------------
-        self.m_chooser = SendableChooser()
-        self.auto_names = ["Test", "TestChoreo", "Baseline", "CheckDrivetrain", "FourNote", "BuildPlay"]
-        self.m_chooser.setDefaultOption("DoNothing", "DoNothing")
-        for x in self.auto_names:
-            self.m_chooser.addOption(x, x)
-        SmartDashboard.putData("Auto Select", self.m_chooser)
-
+        # Set up new autonomous selection structure
         self.m_auto_start_location = SendableChooser()
         self.m_auto_start_location.setDefaultOption("A", "A")
         self.m_auto_start_location.addOption("B", "B")
@@ -121,6 +113,18 @@ class RobotContainer:
 
         SmartDashboard.putBoolean("Misalignment Indicator Active?", False)
         SmartDashboard.putNumber("Misalignment Angle", 0)
+
+        # Setup for all event-trigger commands. ------------------------------------------------------------------------
+        self.configureTriggersDefault()
+        self.configureTestBindings()
+
+        # Setup autonomous selector on the dashboard. ------------------------------------------------------------------
+        self.m_chooser = SendableChooser()
+        self.auto_names = ["Test", "TestChoreo", "Baseline", "CheckDrivetrain", "FourNote", "BuildPlay"]
+        self.m_chooser.setDefaultOption("DoNothing", "DoNothing")
+        for x in self.auto_names:
+            self.m_chooser.addOption(x, x)
+        SmartDashboard.putData("Auto Select", self.m_chooser)
 
     def configureTriggersDefault(self) -> None:
         """Used to set up any commands that trigger when a measured event occurs."""
@@ -186,15 +190,14 @@ class RobotContainer:
                     .with_target_direction(Rotation2d.fromDegrees(self.driver_controller.dir_est_ctrl("R"))))))
 
         # Play affirmative sound on Krakens.
-        # button.Trigger(lambda: self.driver_controller.get_button("LB") and not self.test_bindings).onTrue(
-        #     SequentialCommandGroup(
-        #         runOnce(lambda: self.drivetrain.load_sound("affirmative"), self.drivetrain),
-        #         runOnce(lambda: self.drivetrain.play_sound(), self.drivetrain)))
+        button.Trigger(lambda: self.operator_controller.get_button("LB") and not self.test_bindings).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.drivetrain.load_sound("affirmative"), self.drivetrain),
+                runOnce(lambda: self.drivetrain.play_sound(), self.drivetrain)))
 
         # Auto score in speaker
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue and
-                       self.drivetrain.get_close_to_target([15, 5.53], 2.5)).onTrue(
+                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
             SequentialCommandGroup(
                 runOnce(lambda: self.leds.set_state("flames"), self.leds),
                 self.drivetrain.pathfind_to_pose([1.5, 5.53, 0]),
@@ -205,8 +208,7 @@ class RobotContainer:
             )
         )
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kRed and
-                       self.drivetrain.get_close_to_target([15, 5.53], 2.5)).onTrue(
+                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
             SequentialCommandGroup(
                 runOnce(lambda: self.leds.set_state("flames"), self.leds),
                 self.drivetrain.pathfind_to_pose([15, 5.53, 180]),
@@ -260,9 +262,9 @@ class RobotContainer:
             run(lambda: self.arm.set_voltage_direct(0), self.arm))
 
         # Arm automatic controls.
-        button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).onTrue(
-            runOnce(lambda: self.arm.set_state("intake"), self.arm)).onFalse(
-            runOnce(lambda: self.arm.set_state("stow"), self.arm))
+        # button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).onTrue(
+        #     runOnce(lambda: self.arm.set_state("intake"), self.arm)).onFalse(
+        #     runOnce(lambda: self.arm.set_state("stow"), self.arm))
         button.Trigger(lambda: self.driver_controller.get_button("LB")).onTrue(
             runOnce(lambda: self.arm.set_state("shoot"), self.arm)).onFalse(
             runOnce(lambda: self.arm.set_state("stow"), self.arm))
@@ -290,7 +292,7 @@ class RobotContainer:
         )
 
         # Temporary "drive to game piece" command
-        button.Trigger(lambda: self.driver_controller.get_button("X")).whileTrue(
+        button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).whileTrue(
             DriveToGamePiece(self.drivetrain, self.arm))
 
         # Vibrate the controller when a game piece is in view
@@ -327,14 +329,31 @@ class RobotContainer:
                 runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(0)))
             ))
 
+        # (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
+        #     .whileTrue(
+        #     DriveAligned(self.drivetrain, [16.14, 4.86], 30, True, self.driver_controller)
+        # ))
         (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
             .whileTrue(
-            DriveAligned(self.drivetrain, [16.14, 4.86], 30, True, self.driver_controller)
+            GridAligned(self.drivetrain, self.util, self.arm, 8.29, 90.0001, True, self.driver_controller)
         ))
 
         button.Trigger(lambda: SmartDashboard.getBoolean("Misalignment Indicator Active?", False)).whileTrue(
-            AutoAlignmentLEDs(self.drivetrain, self.leds, self.m_auto_start_location.getSelected())
+            AutoAlignmentLEDs(self.drivetrain, self.leds, self.m_auto_start_location)
             .ignoringDisable(True)
+        )
+
+        button.Trigger(lambda: self.operator_controller.get_d_pad_pull("E")).onTrue(
+            runOnce(lambda: self.util.increment_grid_position(1, 0), self.util).ignoringDisable(True)
+        )
+        button.Trigger(lambda: self.operator_controller.get_d_pad_pull("W")).onTrue(
+            runOnce(lambda: self.util.increment_grid_position(-1, 0), self.util).ignoringDisable(True)
+        )
+        button.Trigger(lambda: self.operator_controller.get_d_pad_pull("N")).onTrue(
+            runOnce(lambda: self.util.increment_grid_position(0, 1), self.util).ignoringDisable(True)
+        )
+        button.Trigger(lambda: self.operator_controller.get_d_pad_pull("S")).onTrue(
+            runOnce(lambda: self.util.increment_grid_position(0, -1), self.util).ignoringDisable(True)
         )
 
         # Configuration for telemetry.

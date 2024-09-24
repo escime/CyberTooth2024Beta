@@ -3,13 +3,11 @@ from commands2 import Command
 from subsystems.command_swerve_drivetrain import CommandSwerveDrivetrain
 from phoenix6 import swerve
 from wpimath.controller import PIDController
-from wpimath.geometry import Rotation2d
 from generated.tuner_constants import TunerConstants
-from wpimath.units import rotationsToRadians, degreesToRadians, radiansToDegrees
-from math import pi, sqrt, pow, cos, sin, atan2
+from wpimath.units import degreesToRadians, radiansToDegrees
+from math import sqrt, pow, cos, sin, atan2
 
 from helpers.custom_hid import CustomHID
-from wpilib import SmartDashboard
 
 
 class DriveAligned(Command):
@@ -25,9 +23,9 @@ class DriveAligned(Command):
                                 .with_drive_request_type(swerve.SwerveModule.DriveRequestType.VELOCITY)
                                 .with_velocity_y(0))
 
-        self.rotate_controller = PIDController(0.5, 0, 0, 0.02)
+        self.rotate_controller = PIDController(0.1, 0, 0, 0.02)
         self.rotate_controller.enableContinuousInput(-180, 180)
-        self.y_controller = PIDController(1, 0, 0, 0.02)
+        self.y_controller = PIDController(0.4, 0, 0, 0.02)
 
     def execute(self):
         x_move = self.joystick.get_axis("LY", 0.1) * -1
@@ -43,6 +41,9 @@ class DriveAligned(Command):
 
         rotate_output = self.rotate_controller.calculate(current_pose.rotation().degrees(), theta + 180)
         y_output = self.y_controller.calculate(self.get_vector_to_line(current_pose, self.approach_angle), 0)
+
+        if -0.05 < y_output < 0.05:
+            y_output = 0
 
         self.drive.apply_request(lambda: (self.forward_request
                                           .with_velocity_x(x_move * TunerConstants.speed_at_12_volts)
@@ -108,4 +109,3 @@ class DriveAligned(Command):
                 return self.get_distance_to_line(current_pose, alpha)
             else:
                 return 0
-
