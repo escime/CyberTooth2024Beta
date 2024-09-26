@@ -1,6 +1,7 @@
 from commands2 import Command, CommandScheduler, TimedCommandRobot
 from robotcontainer import RobotContainer
 from wpilib import run, RobotBase, SmartDashboard, RobotController
+from wpinet import PortForwarder
 from phoenix6 import SignalLogger
 
 
@@ -12,6 +13,9 @@ class Robot(TimedCommandRobot):
     def robotInit(self) -> None:
         """Initialize the robot through the RobotContainer object and prep the default autonomous command (None)"""
         # CameraServer.launch()
+        for i in range(5801, 5810):
+            PortForwarder.getInstance().add(i, "limelight.local", i)
+            PortForwarder.getInstance().add(i + 10, "limelight-gp.local", i)
         self.m_robotcontainer = RobotContainer()
         self.m_autonomous_command = None
 

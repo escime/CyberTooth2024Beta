@@ -151,7 +151,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         for i in range(0, 4):
             self.orchestra.add_instrument(self.modules[i].drive_motor)
             self.orchestra.add_instrument(self.modules[i].steer_motor)
-        self.orchestra.load_music("affirmative.chrp")
+        # self.orchestra.load_music("affirmative.chrp")
 
         # Setup SYSID Routines.
         self.sys_id_routine_translation = sysid.SysIdRoutine(
@@ -248,6 +248,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
 
         # Update robot velocity and acceleration.
         self.vel_acc_periodic()
+
+        SmartDashboard.putBoolean("Orchestra Active", self.orchestra.is_playing())
 
     def vel_acc_periodic(self) -> None:
         """Calculates the instantaneous robot velocity and acceleration."""
@@ -413,16 +415,24 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
 
     def load_sound(self, sound: str) -> None:
         """Prepares drivetrain Krakens to play a sound."""
+        for i in range(0, 4):
+            self.orchestra.add_instrument(self.modules[i].drive_motor)
+            self.orchestra.add_instrument(self.modules[i].steer_motor)
         if sound == "affirmative":
             self.orchestra.load_music("meme1.chrp")
         elif sound == "negative":
             self.orchestra.load_music("negative.chrp")
         else:
             self.orchestra.load_music("invalid_sound.chrp")
+        self.orchestra.play()
 
     def play_sound(self) -> None:
         """Plays a sound on all drivetrain Krakens."""
         self.orchestra.play()
+
+    def clear_orchestra(self) -> None:
+        self.orchestra.stop()
+        self.orchestra.clear_instruments()
 
     def get_gp_in_view(self) -> bool:
         return self.gp_ll_table.getEntry("tv").getDouble(-1) == 1
