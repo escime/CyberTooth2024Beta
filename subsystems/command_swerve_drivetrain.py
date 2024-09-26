@@ -140,6 +140,15 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.ax = 0
         self.ay = 0
         self.alpha = 0
+        self.vx_robot_new = 0
+        self.vy_robot_new = 0
+        self.omega_robot_new = 0
+        self.vx_robot_old = 0
+        self.vy_robot_old = 0
+        self.omega_robot_old = 0
+        self.ax_robot = 0
+        self.ay_robot = 0
+        self.alpha_robot = 0
 
         # Setup swerve drive widget
         # sds = Sendable()
@@ -254,14 +263,26 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
     def vel_acc_periodic(self) -> None:
         """Calculates the instantaneous robot velocity and acceleration."""
         self.vx_new, self.vy_new, self.omega_new = self.get_field_relative_velocity()
+        self.vx_robot_new, self.vy_robot_new, self.omega_robot_new = self.get_robot_relative_velocity()
         self.ax, self.ay, self.alpha = self.get_field_relative_acceleration([self.vx_new, self.vy_new, self.omega_new],
                                                                             [self.vx_old, self.vy_old, self.omega_old],
                                                                             utils.get_current_time_seconds() - self.loop_time)
+        self.ax_robot, self.ay_robot, self.alpha_robot = (
+            self.get_field_relative_acceleration([self.vx_robot_new, self.vy_robot_old, self.omega_robot_new],
+                                                 [self.vx_robot_old, self.vy_robot_old, self.omega_robot_old],
+                                                 utils.get_current_time_seconds() - self.loop_time))
+
         self.vx_old = self.vx_new
         self.vy_old = self.vy_new
         self.omega_old = self.omega_new
+        self.vx_robot_old = self.vx_robot_new
+        self.vy_robot_old = self.vy_robot_new
+        self.omega_robot_old = self.omega_robot_new
+
         self.loop_time = utils.get_current_time_seconds()
         SmartDashboard.putNumber("Robot Linear Speed", math.sqrt((self.vx_new * self.vx_new) + (self.vy_new * self.vy_new)))
+        SmartDashboard.putBoolean("Robot Slipping X", self.get_slip_detected()[0])
+        SmartDashboard.putBoolean("Robot Slipping Y", self.get_slip_detected()[1])
 
     def limelight_periodic(self) -> None:
         """Fuses limelight data with the pose estimator."""
@@ -298,12 +319,15 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
             if self.gp_ll_table.getEntry("tv").getDouble(-1) == 1:
                 self.tx = self.gp_ll_table.getEntry("tx").getDouble(0)
 
-    def get_field_relative_velocity(self) -> [float, float]:
+    def get_field_relative_velocity(self) -> [float, float, float]:
         """Returns the instantaneous velocity of the robot."""
         return self.get_chassis_speeds().vx * self.get_pose().rotation().cos() - \
             self.get_chassis_speeds().vy * self.get_pose().rotation().sin(), \
             self.get_chassis_speeds().vy * self.get_pose().rotation().cos() + \
             self.get_chassis_speeds().vx * self.get_pose().rotation().sin(), self.get_chassis_speeds().omega
+
+    def get_robot_relative_velocity(self) -> [float, float, float]:
+        return self.get_chassis_speeds().vx, self.get_chassis_speeds().vy, self.get_chassis_speeds().omega
 
     def get_angular_velocity(self) -> float:
         """Returns the instantaneous angular velocity of the robot."""
@@ -478,3 +502,26 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         pose = [self.get_pose().x, self.get_pose().y]
         c = math.sqrt(((target[0] - pose[0]) * (target[0] - pose[0])) + ((target[1] - pose[1]) * (target[1] - pose[1])))
         return good_range >= c
+
+    def get_inertial_acceleration(self) -> [float, float]:
+        return [self.pigeon2.get_acceleration_x(False).value_as_double * 9.81,
+                self.pigeon2.get_acceleration_y(False).value_as_double * 9.81]
+
+    def get_slip_detected(self) -> [bool, bool]:
+        x_slip = False
+        y_slip = False
+        if (self.get_inertial_acceleration()[0] > 0 and self.ax_robot > 0 and
+                self.get_inertial_acceleration()[0] > self.ax_robot + 5):
+            x_slip = True
+        elif (self.get_inertial_acceleration()[0] < 0 and self.ax_robot < 0 and
+              self.get_inertial_acceleration()[0] < self.ax_robot - 5):
+            x_slip = True
+
+        if (self.get_inertial_acceleration()[1] > 0 and self.ay_robot > 0 and
+                self.get_inertial_acceleration()[1] > self.ay_robot + 5):
+            y_slip = True
+        elif (self.get_inertial_acceleration()[1] < 0 and self.ay_robot < 0 and
+              self.get_inertial_acceleration()[1] < self.ay_robot - 5):
+            y_slip = True
+
+        return [x_slip, y_slip]
