@@ -281,8 +281,9 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
 
         self.loop_time = utils.get_current_time_seconds()
         SmartDashboard.putNumber("Robot Linear Speed", math.sqrt((self.vx_new * self.vx_new) + (self.vy_new * self.vy_new)))
-        SmartDashboard.putBoolean("Robot Slipping X", self.get_slip_detected()[0])
-        SmartDashboard.putBoolean("Robot Slipping Y", self.get_slip_detected()[1])
+        # SmartDashboard.putBoolean("Robot Slipping X", self.get_slip_detected()[0])
+        # SmartDashboard.putBoolean("Robot Slipping Y", self.get_slip_detected()[1])
+        self.get_slip_detected()
 
     def limelight_periodic(self) -> None:
         """Fuses limelight data with the pose estimator."""
@@ -450,10 +451,6 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
             self.orchestra.load_music("invalid_sound.chrp")
         self.orchestra.play()
 
-    def play_sound(self) -> None:
-        """Plays a sound on all drivetrain Krakens."""
-        self.orchestra.play()
-
     def clear_orchestra(self) -> None:
         self.orchestra.stop()
         self.orchestra.clear_instruments()
@@ -510,18 +507,20 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
     def get_slip_detected(self) -> [bool, bool]:
         x_slip = False
         y_slip = False
+        SmartDashboard.putNumber("IMU Acceleration X", self.get_inertial_acceleration())
+        SmartDashboard.putNumber("Target Acceleration X", self.ax_robot)
         if (self.get_inertial_acceleration()[0] > 0 and self.ax_robot > 0 and
-                self.get_inertial_acceleration()[0] > self.ax_robot + 5):
+                self.get_inertial_acceleration()[0] > self.ax_robot + 2):
             x_slip = True
         elif (self.get_inertial_acceleration()[0] < 0 and self.ax_robot < 0 and
-              self.get_inertial_acceleration()[0] < self.ax_robot - 5):
+              self.get_inertial_acceleration()[0] < self.ax_robot - 2):
             x_slip = True
 
         if (self.get_inertial_acceleration()[1] > 0 and self.ay_robot > 0 and
-                self.get_inertial_acceleration()[1] > self.ay_robot + 5):
+                self.get_inertial_acceleration()[1] > self.ay_robot + 2):
             y_slip = True
         elif (self.get_inertial_acceleration()[1] < 0 and self.ay_robot < 0 and
-              self.get_inertial_acceleration()[1] < self.ay_robot - 5):
+              self.get_inertial_acceleration()[1] < self.ay_robot - 2):
             y_slip = True
 
         return [x_slip, y_slip]
