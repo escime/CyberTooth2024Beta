@@ -507,7 +507,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
     def get_slip_detected(self) -> [bool, bool]:
         x_slip = False
         y_slip = False
-        SmartDashboard.putNumber("IMU Acceleration X", self.get_inertial_acceleration())
+        SmartDashboard.putNumber("IMU Acceleration X", self.get_inertial_acceleration()[0])
         SmartDashboard.putNumber("Target Acceleration X", self.ax_robot)
         if (self.get_inertial_acceleration()[0] > 0 and self.ax_robot > 0 and
                 self.get_inertial_acceleration()[0] > self.ax_robot + 2):

@@ -5,7 +5,7 @@ from commands2 import Command, button, SequentialCommandGroup, ParallelCommandGr
 
 from constants import OIConstants
 from subsystems.ledsubsystem import LEDs
-from subsystems.armsubsystem import ArmSubsystem
+from subsystems.turret_subsystem import TurretSubsystem
 from subsystems.utilsubsystem import UtilSubsystem
 from wpilib import SmartDashboard, SendableChooser, DriverStation, DataLogManager, Timer
 from helpers.custom_hid import CustomHID
@@ -53,7 +53,7 @@ class RobotContainer:
 
         # Startup subsystems. ------------------------------------------------------------------------------------------
         self.leds = LEDs(self.timer)
-        self.arm = ArmSubsystem()
+        self.turret = TurretSubsystem()
         self.util = UtilSubsystem()
 
         # Setup driver & operator controllers. -------------------------------------------------------------------------
@@ -192,50 +192,6 @@ class RobotContainer:
                 WaitCommand(2),
                 runOnce(lambda: self.drivetrain.clear_orchestra(), self.drivetrain)))
 
-        # Auto score in speaker
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([1.5, 5.53, 0]),
-                runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm),
-                WaitCommand(0.75),
-                runOnce(lambda: self.arm.set_state("stow"), self.arm),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)
-            )
-        )
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([15, 5.53, 180]),
-                runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm),
-                WaitCommand(0.75),
-                runOnce(lambda: self.arm.set_state("stow"), self.arm),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)
-            )
-        )
-
-        # Auto score in the amp
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([1.86, 7.64, -90]),
-                runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm),
-                WaitCommand(0.75),
-                runOnce(lambda: self.arm.set_state("stow"), self.arm),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)))
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([14.71, 7.64, -90]),
-                runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm),
-                WaitCommand(0.75),
-                runOnce(lambda: self.arm.set_state("stow"), self.arm),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)))
-
         # Pathfind to the source
         button.Trigger(lambda: self.driver_controller.get_button("B") and not self.test_bindings and
                        DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
@@ -249,48 +205,6 @@ class RobotContainer:
                 runOnce(lambda: self.leds.set_state("flames"), self.leds),
                 self.drivetrain.pathfind_to_pose([1.5, 1, 180]),
                 runOnce(lambda: self.leds.set_state("default"), self.leds)))
-
-        # Arm manual controls.
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("N") and not self.test_bindings).whileTrue(
-            run(lambda: self.arm.set_voltage_direct(1), self.arm)).onFalse(
-            run(lambda: self.arm.set_voltage_direct(0), self.arm))
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("S") and not self.test_bindings).whileTrue(
-            run(lambda: self.arm.set_voltage_direct(-1), self.arm)).onFalse(
-            run(lambda: self.arm.set_voltage_direct(0), self.arm))
-
-        # Arm automatic controls.
-        # button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).onTrue(
-        #     runOnce(lambda: self.arm.set_state("intake"), self.arm)).onFalse(
-        #     runOnce(lambda: self.arm.set_state("stow"), self.arm))
-        button.Trigger(lambda: self.driver_controller.get_button("LB")).onTrue(
-            runOnce(lambda: self.arm.set_state("shoot"), self.arm)).onFalse(
-            runOnce(lambda: self.arm.set_state("stow"), self.arm))
-        button.Trigger(lambda: self.driver_controller.get_button("RB")).onTrue(
-            runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm)).onFalse(
-            runOnce(lambda: self.arm.set_state("stow"), self.arm))
-
-        # Cube acquired light
-        button.Trigger(lambda: self.arm.get_sensor_on() and DriverStation.isTeleop()).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
-                runOnce(lambda: self.leds.set_flash_color_color([0, 255, 0]), self.leds),
-                runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
-                WaitCommand(2),
-                runOnce(lambda: self.leds.set_state("gp_held"), self.leds)
-            ).ignoringDisable(True)
-        ).onFalse(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
-                runOnce(lambda: self.leds.set_flash_color_color([255, 0, 0]), self.leds),
-                runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
-                WaitCommand(0.5),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)
-            ).ignoringDisable(True)
-        )
-
-        # Temporary "drive to game piece" command
-        button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).whileTrue(
-            DriveToGamePiece(self.drivetrain, self.arm))
 
         # Vibrate the controller when a game piece is in view
         button.Trigger(lambda: self.drivetrain.get_gp_in_view()).onTrue(
@@ -326,15 +240,6 @@ class RobotContainer:
                 runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(0)))
             ))
 
-        # (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
-        #     .whileTrue(
-        #     DriveAligned(self.drivetrain, [16.14, 4.86], 30, True, self.driver_controller)
-        # ))
-        (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
-            .whileTrue(
-            GridAligned(self.drivetrain, self.util, self.arm, 8.29, 90.0001, True, self.driver_controller)
-        ))
-
         button.Trigger(lambda: SmartDashboard.getBoolean("Misalignment Indicator Active?", False)).whileTrue(
             AutoAlignmentLEDs(self.drivetrain, self.leds, self.m_auto_start_location)
             .ignoringDisable(True)
@@ -351,6 +256,21 @@ class RobotContainer:
         )
         button.Trigger(lambda: self.operator_controller.get_d_pad_pull("S")).onTrue(
             runOnce(lambda: self.util.increment_grid_position(0, -1), self.util).ignoringDisable(True)
+        )
+
+        button.Trigger(lambda: self.driver_controller.get_button("RB")).onTrue(
+            runOnce(lambda: self.turret.set_state("reverse"), self.turret)
+        )
+        button.Trigger(lambda: self.driver_controller.get_button("LB")).onTrue(
+            runOnce(lambda: self.turret.set_state("zero"), self.turret)
+        )
+
+        button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.01)).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.turret.set_state("auto"), self.turret),
+                run(lambda: self.turret.set_turret_auto_position(
+                    self.turret.get_target_heading(self.drivetrain.get_pose(), [15.19, 5.55])))
+            )
         )
 
         # Configuration for telemetry.
@@ -494,8 +414,3 @@ class RobotContainer:
                                       runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override("gp")))
         NamedCommands.registerCommand("disable_override_heading",
                                       runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override("none")))
-        NamedCommands.registerCommand("intake", runOnce(lambda: self.arm.set_state("intake"),
-                                                        self.arm))
-        NamedCommands.registerCommand("stow", runOnce(lambda: self.arm.set_state("stow"), self.arm))
-        NamedCommands.registerCommand("reverse_shoot", runOnce(lambda: self.arm.set_state("reverse_shoot"),
-                                                               self.arm))
