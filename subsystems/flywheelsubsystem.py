@@ -72,8 +72,10 @@ class FlywheelSubsystem(Subsystem):
         self.flywheel_volts = VoltageOut(0, False)
 
         self.last_time = get_current_time_seconds()
+        self.setpoint_enabled_time = get_current_time_seconds()
 
     def set_state(self, state: str) -> None:
+        self.setpoint_enabled_time = get_current_time_seconds()
         self.state = state
         if state == "auto":
             self.flywheel.set_control(self.flywheel_mm.with_velocity(self.auto_velocity).with_slot(0))
@@ -98,12 +100,12 @@ class FlywheelSubsystem(Subsystem):
         if self.state == "off":
             return True
         elif self.state == "auto":
-            if self.auto_velocity - 3 < self.get_velocity() <= self.auto_velocity + 3:
+            if self.auto_velocity - 9 < self.get_velocity() <= self.auto_velocity + 9:
                 return True
             else:
                 return False
         else:
-            if self.state_values[self.state] - 3 < self.get_velocity() <= self.state_values[self.state] + 3:
+            if self.state_values[self.state] - 9 < self.get_velocity() <= self.state_values[self.state] + 9:
                 return True
             else:
                 return False
@@ -124,3 +126,5 @@ class FlywheelSubsystem(Subsystem):
             self.update_sim()
 
         SmartDashboard.putNumber("Flywheel Velocity", self.get_velocity())
+        SmartDashboard.putBoolean("Flywheel at Speed", self.get_at_target())
+        SmartDashboard.putNumber("Time Since Setpoint Activated", get_current_time_seconds() - self.setpoint_enabled_time)

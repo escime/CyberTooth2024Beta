@@ -261,16 +261,16 @@ class RobotContainer:
             runOnce(lambda: self.flywheel.set_state("safety"), self.flywheel)
         ).onFalse(runOnce(lambda: self.flywheel.set_state("off"), self.flywheel))
 
-        # button.Trigger(lambda: self.driver_controller.get_button("LB")).onTrue(
-        #     SequentialCommandGroup(
-        #         runOnce(lambda: self.flywheel.set_flywheel_auto_velocity(50), self.flywheel),
-        #         runOnce(lambda: self.flywheel.set_state("auto"), self.flywheel)
-        #     )
-        # ).onFalse(runOnce(lambda: self.flywheel.set_state("off"), self.flywheel))
-
         button.Trigger(lambda: self.driver_controller.get_button("LB")).onTrue(
-            runOnce(lambda: self.flywheel.set_voltage_direct(12), self.flywheel)
+            SequentialCommandGroup(
+                runOnce(lambda: self.flywheel.set_flywheel_auto_velocity(50), self.flywheel),
+                runOnce(lambda: self.flywheel.set_state("auto"), self.flywheel)
+            )
         ).onFalse(runOnce(lambda: self.flywheel.set_state("off"), self.flywheel))
+
+        # button.Trigger(lambda: self.driver_controller.get_button("LB")).onTrue(
+        #     runOnce(lambda: self.flywheel.set_voltage_direct(12), self.flywheel)
+        # ).onFalse(runOnce(lambda: self.flywheel.set_state("off"), self.flywheel))
 
         # Configuration for telemetry.
         if utils.is_simulation():
