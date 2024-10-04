@@ -97,6 +97,20 @@ class LEDs(Subsystem):
         self.notifier_on = False
         self.priority_notifier = [255, 0, 0]
 
+        # Setup time variable default settings
+        self.counter = 1
+        self.time_default_pattern = [AddressableLED.LEDData(149, 50, 168)] * 2
+        for i in range(0, 2):
+            self.time_default_pattern.append(AddressableLED.LEDData(int(149 * 0.75), int(50 * 0.75), int(168 * 0.75)))
+        for i in range(0, 3):
+            self.time_default_pattern.append(AddressableLED.LEDData(int(149 * 0.5), int(50 * 0.5), int(168 * 0.5)))
+        for i in range(0, 7):
+            self.time_default_pattern.append(AddressableLED.LEDData(int(149 * 0.25), int(50 * 0.25), int(168 * 0.25)))
+        for i in range(0, 7):
+            self.time_default_pattern.append(AddressableLED.LEDData(int(149 * 0.1), int(50 * 0.1), int(168 * 0.1)))
+        for i in range(0, LEDConstants.strip_length - 21):
+            self.time_default_pattern.append(AddressableLED.LEDData(0, 0, 0))
+
         self.display_buffer = [0] * LEDConstants.strip_length
 
         self.last_time = self.timer.get()
@@ -106,6 +120,21 @@ class LEDs(Subsystem):
         self.state = target_state
         if target_state == "timer_lights":
             self.buffer = [AddressableLED.LEDData(255, 0, 0)] * LEDConstants.strip_length
+        if target_state == "time_variable_default":
+            self.counter = 1
+            self.time_default_pattern = [AddressableLED.LEDData(149, 50, 168)] * 2
+            for i in range(0, 2):
+                self.time_default_pattern.append(
+                    AddressableLED.LEDData(int(149 * 0.75), int(50 * 0.75), int(168 * 0.75)))
+            for i in range(0, 3):
+                self.time_default_pattern.append(AddressableLED.LEDData(int(149 * 0.5), int(50 * 0.5), int(168 * 0.5)))
+            for i in range(0, 7):
+                self.time_default_pattern.append(
+                    AddressableLED.LEDData(int(149 * 0.25), int(50 * 0.25), int(168 * 0.25)))
+            for i in range(0, 7):
+                self.time_default_pattern.append(AddressableLED.LEDData(int(149 * 0.1), int(50 * 0.1), int(168 * 0.1)))
+            for i in range(0, LEDConstants.strip_length - 21):
+                self.time_default_pattern.append(AddressableLED.LEDData(0, 0, 0))
 
     def periodic(self) -> None:
         if self.state == "default":
@@ -124,6 +153,8 @@ class LEDs(Subsystem):
             self.align()
         elif self.state == "flames":
             self.flames()
+        elif self.state == "time_variable_default":
+            self.time_variable_default()
         else:
             self.default()
 
@@ -144,6 +175,15 @@ class LEDs(Subsystem):
             self.buffer = self.default_pattern
             self.default_pattern = self.default_pattern[1:] + self.default_pattern[:1]
             self.last_time = self.timer.get()
+
+    def time_variable_default(self) -> None:
+        self.counter += 1
+        if self.timer.get() - (0.05 * self.counter) > self.last_time:
+            self.buffer = self.time_default_pattern
+            self.time_default_pattern = self.time_default_pattern[1:] + self.time_default_pattern[:1]
+            self.last_time = self.timer.get()
+        if self.counter > LEDConstants.strip_length:
+            self.counter = 0
 
     def flash_color(self) -> None:
         """Flash a specified color at a specified frequency."""

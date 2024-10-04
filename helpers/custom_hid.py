@@ -19,12 +19,10 @@ class CustomHID:
             self.controller = Joystick(port)
             self.controller_type = "generic"
 
-        self.slew_limiter_lx = SlewRateLimiter(3, -3, 0)
-        self.slew_limiter_ly = SlewRateLimiter(3, -3, 0)
-        self.slew_limiter_rx = SlewRateLimiter(3, -3, 0)
-        self.slew_limiter_ry = SlewRateLimiter(3, -3, 0)
-
-        self.dir_est_ctrl_origin_needed = True
+        self.slew_limiter_lx = SlewRateLimiter(5, -5, 0)  # 3
+        self.slew_limiter_ly = SlewRateLimiter(5, -5, 0)
+        self.slew_limiter_rx = SlewRateLimiter(5, -5, 0)
+        self.slew_limiter_ry = SlewRateLimiter(5, -5, 0)
 
     def reset_controller(self, hid, port):
         if hid == "xbox":
@@ -234,21 +232,27 @@ class CustomHID:
             y_ax = self.get_axis("LY", 0.1)
         if math.sqrt(x_ax * x_ax + y_ax * y_ax) >= 0.99:
             self.direction = math.degrees(math.atan2(x_ax, y_ax)) - 180
-            if DriverStation.getAlliance() == DriverStation.Alliance.kBlue:
-                self.direction += 360
+        if DriverStation.getAlliance() == DriverStation.Alliance.kBlue:
+            self.direction += 360
         # print("DIRECTION: " + str(self.direction))
         return self.direction
 
-    def dir_est_ctrl_origin(self, stick: str, start_heading: float):
-        if self.dir_est_ctrl_origin_needed:
-            self.direction = start_heading
-            self.dir_est_ctrl_origin_needed = False
+    def dir_add_ctrl(self, axis_input: str, scalar: float):
+        if axis_input == "RX":
+            axis = self.get_axis_squared("RY", 0.05) * -1
+        elif axis_input == "RY":
+            axis = self.get_axis_squared("RX", 0.05) * -1
+        elif axis_input == "LX":
+            axis = self.get_axis_squared("LX", 0.05)
         else:
-            self.dir_est_ctrl(stick)
+            axis = self.get_axis_squared("LY", 0.05)
+        self.direction = self.direction + (axis * scalar)
+        if DriverStation.getAlliance() == DriverStation.Alliance.kBlue:
+            self.direction += 360
         return self.direction
 
-    def reset_dir_est_ctrl_origin_needed(self):
-        self.dir_est_ctrl_origin_needed = True
+    def set_start_direction(self, direction):
+        self.direction = direction + 180
 
     def refine_trigger(self, trigger: str, deadband: float, maxi: float, mini: float) -> float:
         """Modification of get_trigger() that refines its output between a maximum and a minimum value"""

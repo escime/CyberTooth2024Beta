@@ -71,10 +71,10 @@ class RobotContainer:
         self.drivetrain = TunerConstants.create_drivetrain()
 
         self._drive = (
-            swerve.requests.FieldCentric()
+            swerve.requests.FieldCentric() # I want field-centric
             .with_deadband(self._max_speed * 0.1)
             .with_rotational_deadband(self._max_angular_rate * 0.1)  # Add a 10% deadband
-            .with_drive_request_type(swerve.SwerveModule.DriveRequestType.OPEN_LOOP_VOLTAGE)  # I want field-centric
+            .with_drive_request_type(swerve.SwerveModule.DriveRequestType.VELOCITY)
             .with_desaturate_wheel_speeds(True)
             # driving in open loop
         )
@@ -83,7 +83,7 @@ class RobotContainer:
         self._hold_heading = (
             swerve.requests.FieldCentricFacingAngle()
             .with_deadband(self._max_speed * 0.1)
-            .with_drive_request_type(swerve.SwerveModule.DriveRequestType.OPEN_LOOP_VOLTAGE)
+            .with_drive_request_type(swerve.SwerveModule.DriveRequestType.VELOCITY)
             .with_desaturate_wheel_speeds(True)
         )
         self._hold_heading.heading_controller.setPID(5, 0, 0)
@@ -178,12 +178,30 @@ class RobotContainer:
         # VIEW toggles on "snap heading" mode, where the driver can snap the right joystick in the direction they want
         # the robot to face.
         button.Trigger(lambda: self.driver_controller.get_button("VIEW") and not self.test_bindings).toggleOnTrue(
-            self.drivetrain.apply_request(
-                lambda: (
-                    self._hold_heading.with_velocity_x(
-                        -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
-                    .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
-                    .with_target_direction(Rotation2d.fromDegrees(self.driver_controller.dir_est_ctrl("R"))))))
+            SequentialCommandGroup(
+                runOnce(lambda: self.driver_controller.set_start_direction(
+                    self.drivetrain.get_pose().rotation().degrees()), self.drivetrain),
+                self.drivetrain.apply_request(
+                    lambda: (
+                        self._hold_heading.with_velocity_x(
+                            -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
+                        .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
+                        .with_target_direction(Rotation2d.fromDegrees(self.driver_controller.dir_est_ctrl("R")))))))
+
+        # MENU toggles on "add heading" mode, where the robot operates with closed-loop-turning, and the heading is
+        # modified parabolically by the right thumbstick.
+        button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings).toggleOnTrue(
+            SequentialCommandGroup(
+                runOnce(
+                    lambda: self.driver_controller.set_start_direction(self.drivetrain.get_pose().rotation().degrees()),
+                    self.drivetrain),
+                self.drivetrain.apply_request(
+                    lambda: (
+                        self._hold_heading.with_velocity_x(
+                            -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
+                        .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
+                        .with_target_direction(Rotation2d.fromDegrees(self.driver_controller.dir_add_ctrl("RX",
+                                                                                                          3.5)))))))
 
         # Play affirmative sound on Krakens.
         button.Trigger(lambda: self.operator_controller.get_button("LB") and not self.test_bindings).onTrue(
@@ -311,6 +329,7 @@ class RobotContainer:
             runOnce(lambda: self.leds.set_notifier([-1, -1, -1]), self.leds).ignoringDisable(True)
         )
 
+        # Reset heading and position when at the subwoofer by pressing "Y".
         button.Trigger(lambda: self.driver_controller.get_button("Y") and not self.test_bindings and
                        DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
             SequentialCommandGroup(
@@ -335,11 +354,13 @@ class RobotContainer:
             GridAligned(self.drivetrain, self.util, self.arm, 8.29, 90.0001, True, self.driver_controller)
         ))
 
+        # Activate autonomous misalignment lights.
         button.Trigger(lambda: SmartDashboard.getBoolean("Misalignment Indicator Active?", False)).whileTrue(
             AutoAlignmentLEDs(self.drivetrain, self.leds, self.m_auto_start_location)
             .ignoringDisable(True)
         )
 
+        # Grid scoring controls test.
         button.Trigger(lambda: self.operator_controller.get_d_pad_pull("E")).onTrue(
             runOnce(lambda: self.util.increment_grid_position(1, 0), self.util).ignoringDisable(True)
         )
@@ -391,6 +412,10 @@ class RobotContainer:
                     Rotation2d(-self.driver_controller.get_axis("LY", 0.05),
                                -self.driver_controller.get_axis("LX", 0.05)))
             ))
+
+        button.Trigger(lambda: self.driver_controller.get_button("VIEW") and self.test_bindings).onTrue(
+            runOnce(lambda: self.leds.set_state("time_variable_default"), self.leds)
+        )
 
     def configureSYSID(self) -> None:
         # Run Quasistatic Translational test.

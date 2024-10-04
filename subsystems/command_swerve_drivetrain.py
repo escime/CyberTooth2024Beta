@@ -30,7 +30,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
     _RED_ALLIANCE_PERSPECTIVE_ROTATION = Rotation2d.fromDegrees(180)
     """Red alliance sees forward as 180 degrees (toward blue alliance wall)"""
 
-    auto_request = swerve.requests.ApplyChassisSpeeds()
+    auto_request = swerve.requests.ApplyChassisSpeeds().with_drive_request_type(swerve.SwerveModule.DriveRequestType.VELOCITY)
 
     @overload
     def __init__(self, drivetrain_constants: swerve.SwerveDrivetrainConstants,
