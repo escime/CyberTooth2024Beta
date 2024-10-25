@@ -44,7 +44,7 @@ class TunerConstants:
                 configs.CurrentLimitsConfigs()
                     .with_stator_current_limit(110)
                     .with_stator_current_limit_enable(True)
-                    .with_supply_current_limit(90)
+                    .with_supply_current_limit(40)
                     .with_stator_current_limit_enable(True)
                     .with_supply_current_lower_time(0.5)
         )
@@ -57,7 +57,7 @@ class TunerConstants:
                     # stator current limit to help avoid brownouts without impacting performance.
                     .with_stator_current_limit(80)
                     .with_stator_current_limit_enable(True)
-                    .with_supply_current_limit(60)
+                    .with_supply_current_limit(40)
                     .with_supply_current_limit_enable(True)
                     .with_supply_current_lower_time(0.2)
             )

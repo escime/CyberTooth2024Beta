@@ -9,6 +9,7 @@ from subsystems.armsubsystem import ArmSubsystem
 from subsystems.utilsubsystem import UtilSubsystem
 from wpilib import SmartDashboard, SendableChooser, DriverStation, DataLogManager, Timer
 from helpers.custom_hid import CustomHID
+from helpers.data_wrap import DataWrap
 from pathplannerlib.auto import NamedCommands, PathPlannerAuto
 
 from generated.tuner_constants import TunerConstants
@@ -52,6 +53,7 @@ class RobotContainer:
             print("Simulated, logging disabled.")
 
         # Startup subsystems. ------------------------------------------------------------------------------------------
+        self.data_wrap = DataWrap()
         self.leds = LEDs(self.timer)
         self.arm = ArmSubsystem()
         self.util = UtilSubsystem()
@@ -71,12 +73,11 @@ class RobotContainer:
         self.drivetrain = TunerConstants.create_drivetrain()
 
         self._drive = (
-            swerve.requests.FieldCentric() # I want field-centric
+            swerve.requests.FieldCentric()  # I want field-centric
             .with_deadband(self._max_speed * 0.1)
             .with_rotational_deadband(self._max_angular_rate * 0.1)  # Add a 10% deadband
             .with_drive_request_type(swerve.SwerveModule.DriveRequestType.VELOCITY)
             .with_desaturate_wheel_speeds(True)
-            # driving in open loop
         )
         self._brake = swerve.requests.SwerveDriveBrake()
         self._point = swerve.requests.PointWheelsAt()
@@ -177,7 +178,7 @@ class RobotContainer:
 
         # VIEW toggles on "snap heading" mode, where the driver can snap the right joystick in the direction they want
         # the robot to face.
-        button.Trigger(lambda: self.driver_controller.get_button("VIEW") and not self.test_bindings).toggleOnTrue(
+        button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings).toggleOnTrue(
             SequentialCommandGroup(
                 runOnce(lambda: self.driver_controller.set_start_direction(
                     self.drivetrain.get_pose().rotation().degrees()), self.drivetrain),
@@ -188,86 +189,6 @@ class RobotContainer:
                         .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
                         .with_target_direction(Rotation2d.fromDegrees(self.driver_controller.dir_est_ctrl("R")))))))
 
-        # MENU toggles on "add heading" mode, where the robot operates with closed-loop-turning, and the heading is
-        # modified parabolically by the right thumbstick.
-        button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings).toggleOnTrue(
-            SequentialCommandGroup(
-                runOnce(
-                    lambda: self.driver_controller.set_start_direction(self.drivetrain.get_pose().rotation().degrees()),
-                    self.drivetrain),
-                self.drivetrain.apply_request(
-                    lambda: (
-                        self._hold_heading.with_velocity_x(
-                            -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
-                        .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
-                        .with_target_direction(Rotation2d.fromDegrees(self.driver_controller.dir_add_ctrl("RX",
-                                                                                                          3.5)))))))
-
-        # Play affirmative sound on Krakens.
-        button.Trigger(lambda: self.operator_controller.get_button("LB") and not self.test_bindings).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.drivetrain.load_sound("affirmative"), self.drivetrain),
-                WaitCommand(2),
-                runOnce(lambda: self.drivetrain.clear_orchestra(), self.drivetrain)))
-
-        # Auto score in speaker
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([1.5, 5.53, 0]),
-                runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm),
-                WaitCommand(0.75),
-                runOnce(lambda: self.arm.set_state("stow"), self.arm),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)
-            )
-        )
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([15, 5.53, 180]),
-                runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm),
-                WaitCommand(0.75),
-                runOnce(lambda: self.arm.set_state("stow"), self.arm),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)
-            )
-        )
-
-        # Auto score in the amp
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([1.86, 7.64, -90]),
-                runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm),
-                WaitCommand(0.75),
-                runOnce(lambda: self.arm.set_state("stow"), self.arm),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)))
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([14.71, 7.64, -90]),
-                runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm),
-                WaitCommand(0.75),
-                runOnce(lambda: self.arm.set_state("stow"), self.arm),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)))
-
-        # Pathfind to the source
-        button.Trigger(lambda: self.driver_controller.get_button("B") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([15, 1, 0]),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)))
-        button.Trigger(lambda: self.driver_controller.get_button("B") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_state("flames"), self.leds),
-                self.drivetrain.pathfind_to_pose([1.5, 1, 180]),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)))
-
         # Arm manual controls.
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("N") and not self.test_bindings).whileTrue(
             run(lambda: self.arm.set_voltage_direct(1), self.arm)).onFalse(
@@ -275,17 +196,6 @@ class RobotContainer:
         button.Trigger(lambda: self.driver_controller.get_d_pad_pull("S") and not self.test_bindings).whileTrue(
             run(lambda: self.arm.set_voltage_direct(-1), self.arm)).onFalse(
             run(lambda: self.arm.set_voltage_direct(0), self.arm))
-
-        # Arm automatic controls.
-        # button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).onTrue(
-        #     runOnce(lambda: self.arm.set_state("intake"), self.arm)).onFalse(
-        #     runOnce(lambda: self.arm.set_state("stow"), self.arm))
-        button.Trigger(lambda: self.driver_controller.get_button("LB")).onTrue(
-            runOnce(lambda: self.arm.set_state("shoot"), self.arm)).onFalse(
-            runOnce(lambda: self.arm.set_state("stow"), self.arm))
-        button.Trigger(lambda: self.driver_controller.get_button("RB")).onTrue(
-            runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm)).onFalse(
-            runOnce(lambda: self.arm.set_state("stow"), self.arm))
 
         # Cube acquired light
         button.Trigger(lambda: self.arm.get_sensor_on() and DriverStation.isTeleop()).onTrue(
@@ -306,7 +216,7 @@ class RobotContainer:
             ).ignoringDisable(True)
         )
 
-        # Temporary "drive to game piece" command
+        # Drive to game piece
         button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).whileTrue(
             DriveToGamePiece(self.drivetrain, self.arm))
 
@@ -345,10 +255,7 @@ class RobotContainer:
                 runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(0)))
             ))
 
-        # (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
-        #     .whileTrue(
-        #     DriveAligned(self.drivetrain, [16.14, 4.86], 30, True, self.driver_controller)
-        # ))
+        # Scoring grid alignment
         (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
             .whileTrue(
             GridAligned(self.drivetrain, self.util, self.arm, 8.29, 90.0001, True, self.driver_controller)
@@ -360,7 +267,7 @@ class RobotContainer:
             .ignoringDisable(True)
         )
 
-        # Grid scoring controls test.
+        # Grid scoring controls.
         button.Trigger(lambda: self.operator_controller.get_d_pad_pull("E")).onTrue(
             runOnce(lambda: self.util.increment_grid_position(1, 0), self.util).ignoringDisable(True)
         )

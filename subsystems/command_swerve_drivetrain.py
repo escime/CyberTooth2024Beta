@@ -3,18 +3,19 @@ import math
 from commands2 import Command, Subsystem, sysid
 from phoenix6 import swerve, units, utils, SignalLogger, orchestra
 from typing import Callable, overload
-from wpilib import DriverStation, Notifier, RobotController, SmartDashboard
+from wpilib import DriverStation, Notifier, RobotController, SmartDashboard, Field2d
 # from wpiutil import Sendable, SendableBuilder
 from wpilib.sysid import SysIdRoutineLog
 from wpimath.geometry import Rotation2d, Pose2d, Translation2d
-from pathplannerlib.auto import AutoBuilder, HolonomicPathFollowerConfig, ReplanningConfig
+from pathplannerlib.auto import AutoBuilder
+from pathplannerlib.config import PIDConstants, RobotConfig
+from pathplannerlib.path import PathConstraints
 from pathplannerlib.controller import PPHolonomicDriveController
-from pathplannerlib.config import PIDConstants
-from pathplannerlib.path import PathPlannerPath, PathConstraints, GoalEndState
-from pathplannerlib.commands import PathfindHolonomic
+from pathplannerlib.commands import PathfindingCommand
 from constants import AutoConstants
 from ntcore import NetworkTableInstance
 # import types
+from helpers.data_wrap import DataWrap
 
 
 class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
@@ -30,7 +31,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
     _RED_ALLIANCE_PERSPECTIVE_ROTATION = Rotation2d.fromDegrees(180)
     """Red alliance sees forward as 180 degrees (toward blue alliance wall)"""
 
-    auto_request = swerve.requests.ApplyChassisSpeeds().with_drive_request_type(swerve.SwerveModule.DriveRequestType.VELOCITY)
+    auto_request = swerve.requests.ApplyChassisSpeeds().with_drive_request_type(
+        swerve.SwerveModule.DriveRequestType.VELOCITY)
 
     @overload
     def __init__(self, drivetrain_constants: swerve.SwerveDrivetrainConstants,
@@ -112,6 +114,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         Subsystem.__init__(self)
         swerve.SwerveDrivetrain.__init__(self, drivetrain_constants, arg2, arg3, arg4, arg5)
 
+        self.config = RobotConfig.fromGUISettings()
+
         self._sim_notifier: Notifier | None = None
         self._last_sim_time: units.second = 0.0
 
@@ -125,6 +129,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.gp_ll_table = NetworkTableInstance.getDefault().getTable("limelight-gp")
         self.gp_ll_gp_mode = True
         self.tx = 0.0
+        self.gp_locations = []
+        self.gp_field = Field2d()
 
         self.pathplanner_rotation_overridden = False
         self.configure_pathplanner()
@@ -149,11 +155,6 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.ax_robot = 0
         self.ay_robot = 0
         self.alpha_robot = 0
-
-        # Setup swerve drive widget
-        # sds = Sendable()
-        # sds.initSendable = types.MethodType(self.initSendable, sds)
-        # SmartDashboard.putData("Swerve Drive", sds)
 
         # Setup Orchestra.
         self.orchestra = orchestra.Orchestra()
@@ -196,34 +197,6 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                 self
             )
         )
-
-    # def set_none(self, value: float) -> None:
-    #     value += 1
-
-    # def initSendable(self, builder: SendableBuilder) -> None:
-    #     builder.setSmartDashboardType("SwerveDrive")
-    #     builder.addDoubleProperty("Front Left Angle",
-    #                               lambda: self.modules[0].steer_motor.get_position().value_as_double, self.set_none)
-    #     builder.addDoubleProperty("Front Left Velocity",
-    #                               lambda: self.modules[0].drive_motor.get_velocity().value_as_double, self.set_none)
-    #     builder.addDoubleProperty("Front Right Angle",
-    #                               lambda: self.modules[1].steer_motor.get_position().value_as_double,
-    #                               self.set_none)
-    #     builder.addDoubleProperty("Front Right Velocity",
-    #                               lambda: self.modules[1].drive_motor.get_velocity().value_as_double,
-    #                               self.set_none)
-    #     builder.addDoubleProperty("Back Left Angle", lambda: self.modules[2].steer_motor.get_position().value_as_double,
-    #                               self.set_none)
-    #     builder.addDoubleProperty("Back Left Velocity",
-    #                               lambda: self.modules[2].drive_motor.get_velocity().value_as_double,
-    #                               self.set_none)
-    #     builder.addDoubleProperty("Back Right Angle",
-    #                               lambda: self.modules[3].steer_motor.get_position().value_as_double,
-    #                               self.set_none)
-    #     builder.addDoubleProperty("Back Right Velocity",
-    #                               lambda: self.modules[3].drive_motor.get_velocity().value_as_double,
-    #                               self.set_none)
-    #     builder.addDoubleProperty("Robot Angle", lambda: self.get_pose().rotation().radians(), self.set_none)
 
     def apply_request(self, request: Callable[[], swerve.requests.SwerveRequest]) -> Command:
         """
@@ -281,8 +254,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
 
         self.loop_time = utils.get_current_time_seconds()
         SmartDashboard.putNumber("Robot Linear Speed", math.sqrt((self.vx_new * self.vx_new) + (self.vy_new * self.vy_new)))
-        # SmartDashboard.putBoolean("Robot Slipping X", self.get_slip_detected()[0])
-        # SmartDashboard.putBoolean("Robot Slipping Y", self.get_slip_detected()[1])
+        SmartDashboard.putBoolean("Robot Slipping X", self.get_slip_detected()[0])
+        SmartDashboard.putBoolean("Robot Slipping Y", self.get_slip_detected()[1])
         self.get_slip_detected()
 
     def limelight_periodic(self) -> None:
@@ -319,6 +292,45 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                 SmartDashboard.putBoolean("Valid AprilTag Detected?", False)
             if self.gp_ll_table.getEntry("tv").getDouble(-1) == 1:
                 self.tx = self.gp_ll_table.getEntry("tx").getDouble(0)
+                self.add_gp_to_detected_list(self.estimate_gp_location())
+                SmartDashboard.putString("GP Locations", str(self.gp_locations))
+            else:
+                self.remove_gp_from_detected_list()
+                SmartDashboard.putString("GP Locations", str(self.gp_locations))
+
+    def estimate_gp_location(self) -> [float, float, float]:
+        h = (self.gp_ll_table.getEntry("ta").getDouble(0) * 0.01 * 788.644 + 1.692) * 0.0254  # 1 replaced with empirical ratio
+        y = h * math.sin(self.get_pose().rotation().radians())
+        x = h * math.cos(self.get_pose().rotation().radians())
+
+        return [self.get_pose().x + x, self.get_pose().y + y, self.get_pose().rotation().degrees(),
+                utils.get_current_time_seconds()]
+
+    def add_gp_to_detected_list(self, gp: [float, float, float, float]) -> None:
+        if self.gp_locations:
+            for x in self.gp_locations:
+                if gp[0] - 0.5 < x[0] < gp[0] + 0.5 and gp[1] - 0.5 < x[1] < gp[1] + 0.5:
+                    x[0] = gp[0]
+                    x[1] = gp[1]
+                    x[2] = gp[2]
+                    x[3] = gp[3]
+                else:
+                    self.gp_locations.append([gp[0], gp[1], gp[2], gp[3]])
+        else:
+            self.gp_locations.append([gp[0], gp[1], gp[2], gp[3]])
+        # self.display_gps_as_poses()
+
+    def remove_gp_from_detected_list(self):
+        for x in self.gp_locations:
+            if (self.get_pose().rotation().degrees() - 2 < x[2] < self.get_pose().rotation().degrees() + 2 or
+                    x[3] < utils.get_current_time_seconds() - 5):
+                self.gp_locations.remove(x)
+                self.display_gps_as_poses()
+
+    def display_gps_as_poses(self):
+        for i in range(0, len(self.gp_locations)):
+            self.gp_field.getObject("gp" + str(i)).setPose(Pose2d(self.gp_locations[i][0], self.gp_locations[i][1], 0))
+        SmartDashboard.putData(self.gp_field)
 
     def get_field_relative_velocity(self) -> [float, float, float]:
         """Returns the instantaneous velocity of the robot."""
@@ -396,18 +408,17 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
 
     def configure_pathplanner(self) -> None:
         """Configures all pathplanner settings."""
-        AutoBuilder.configureHolonomic(
+        AutoBuilder.configure(
             self.get_pose,
             self.seed_field_relative,
             self.get_chassis_speeds,
-            lambda speeds: self.set_control(self.auto_request.with_speeds(speeds)),
-            HolonomicPathFollowerConfig(
+            lambda speeds, feedforwards: self.set_control(self.auto_request.with_speeds(speeds)),
+            PPHolonomicDriveController(
                 PIDConstants(AutoConstants.x_pid[0], AutoConstants.x_pid[1], AutoConstants.x_pid[2]),
                 PIDConstants(AutoConstants.y_pid[0], AutoConstants.y_pid[1], AutoConstants.y_pid[2]),
                 AutoConstants.speed_at_12_volts,
-                AutoConstants.drive_base_radius,
-                ReplanningConfig()
             ),
+            self.config,
             self.get_path_flip,
             self
         )
@@ -476,23 +487,10 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         target_pose = Pose2d(target[0], target[1], Rotation2d.fromDegrees(target[2]))
         constraints = PathConstraints(4, 4, 9.424, 12.567)
 
-        return PathfindHolonomic(
+        return AutoBuilder.pathfindToPose(
+            target_pose,
             constraints,
-            self.get_pose,
-            self.get_chassis_speeds,
-            lambda speeds: self.set_control(self.auto_request.with_speeds(speeds)),
-            HolonomicPathFollowerConfig(
-                PIDConstants(AutoConstants.x_pid[0], AutoConstants.x_pid[1], AutoConstants.x_pid[2]),
-                PIDConstants(AutoConstants.y_pid[0], AutoConstants.y_pid[1], AutoConstants.y_pid[2]),
-                AutoConstants.speed_at_12_volts,
-                AutoConstants.drive_base_radius,
-                ReplanningConfig()
-            ),
-            lambda: False,
-            self,
-            rotation_delay_distance=0,
-            target_pose=target_pose,
-            goal_end_vel=0
+            goal_end_vel=0.0
         )
 
     def get_close_to_target(self, target: [float, float], good_range: float) -> bool:
@@ -501,8 +499,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         return good_range >= c
 
     def get_inertial_acceleration(self) -> [float, float]:
-        return [self.pigeon2.get_acceleration_x(False).value_as_double * 9.81,
-                self.pigeon2.get_acceleration_y(False).value_as_double * 9.81]
+        return [self.pigeon2.get_acceleration_x(True).value_as_double * 9.81,
+                self.pigeon2.get_acceleration_y(True).value_as_double * 9.81]
 
     def get_slip_detected(self) -> [bool, bool]:
         x_slip = False
