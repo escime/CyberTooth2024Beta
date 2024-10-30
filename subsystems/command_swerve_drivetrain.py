@@ -122,6 +122,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
             self._start_sim_thread()
 
         self.odo_ll_table = NetworkTableInstance.getDefault().getTable("limelight")
+        self.odo2_ll_table = NetworkTableInstance.getDefault().getTable("limelight-odo2")
         self.gp_ll_table = NetworkTableInstance.getDefault().getTable("limelight-gp")
         self.gp_ll_gp_mode = True
         self.tx = 0.0
@@ -149,11 +150,6 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.ax_robot = 0
         self.ay_robot = 0
         self.alpha_robot = 0
-
-        # Setup swerve drive widget
-        # sds = Sendable()
-        # sds.initSendable = types.MethodType(self.initSendable, sds)
-        # SmartDashboard.putData("Swerve Drive", sds)
 
         # Setup Orchestra.
         self.orchestra = orchestra.Orchestra()
@@ -196,34 +192,6 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                 self
             )
         )
-
-    # def set_none(self, value: float) -> None:
-    #     value += 1
-
-    # def initSendable(self, builder: SendableBuilder) -> None:
-    #     builder.setSmartDashboardType("SwerveDrive")
-    #     builder.addDoubleProperty("Front Left Angle",
-    #                               lambda: self.modules[0].steer_motor.get_position().value_as_double, self.set_none)
-    #     builder.addDoubleProperty("Front Left Velocity",
-    #                               lambda: self.modules[0].drive_motor.get_velocity().value_as_double, self.set_none)
-    #     builder.addDoubleProperty("Front Right Angle",
-    #                               lambda: self.modules[1].steer_motor.get_position().value_as_double,
-    #                               self.set_none)
-    #     builder.addDoubleProperty("Front Right Velocity",
-    #                               lambda: self.modules[1].drive_motor.get_velocity().value_as_double,
-    #                               self.set_none)
-    #     builder.addDoubleProperty("Back Left Angle", lambda: self.modules[2].steer_motor.get_position().value_as_double,
-    #                               self.set_none)
-    #     builder.addDoubleProperty("Back Left Velocity",
-    #                               lambda: self.modules[2].drive_motor.get_velocity().value_as_double,
-    #                               self.set_none)
-    #     builder.addDoubleProperty("Back Right Angle",
-    #                               lambda: self.modules[3].steer_motor.get_position().value_as_double,
-    #                               self.set_none)
-    #     builder.addDoubleProperty("Back Right Velocity",
-    #                               lambda: self.modules[3].drive_motor.get_velocity().value_as_double,
-    #                               self.set_none)
-    #     builder.addDoubleProperty("Robot Angle", lambda: self.get_pose().rotation().radians(), self.set_none)
 
     def apply_request(self, request: Callable[[], swerve.requests.SwerveRequest]) -> Command:
         """
@@ -289,10 +257,17 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         """Fuses limelight data with the pose estimator."""
         self.odo_ll_table.putNumberArray("robot_orientation_set",
                                          [self.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
+        self.odo2_ll_table.putNumberArray("robot_orientation_set",
+                                          [self.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
 
         odo_ll_botpose = self.odo_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0,
                                                                                            0.0, 0.0, 0.0, 0.0,
                                                                                            0.0, 0.0, 0.0, 0.0])
+
+        odo2_ll_botpose = self.odo2_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0,
+                                                                                             0.0, 0.0, 0.0, 0.0,
+                                                                                             0.0, 0.0, 0.0, 0.0])
+
         if not self.gp_ll_gp_mode:
             self.gp_ll_table.putNumberArray("robot_orientation_set",
                                             [self.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
@@ -300,20 +275,36 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
             gp_ll_botpose = self.gp_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0,
                                                                                              0.0, 0.0, 0.0, 0.0,
                                                                                              0.0, 0.0, 0.0, 0.0])
-            if odo_ll_botpose[9] < gp_ll_botpose[9] < 10 and odo_ll_botpose[7] >= 1:
+            if (odo_ll_botpose[9] < gp_ll_botpose[9] < 10 and odo_ll_botpose[9] < odo2_ll_botpose[9] < 10 and
+                    odo_ll_botpose[7] >= 1):
                 self.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]),
                                                    Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
-                                            utils.get_current_time_seconds() - (odo_ll_botpose[6]))
-            elif gp_ll_botpose[9] < odo_ll_botpose[9] < 10 and gp_ll_botpose[7] >= 1:
+                                            utils.get_current_time_seconds() - (odo_ll_botpose[6] / 1000.0),
+                                            (0.2, 0.2, 999999999))
+            elif (gp_ll_botpose[9] < odo_ll_botpose[9] < 10 and gp_ll_botpose < odo2_ll_botpose[9] < 10 and
+                  gp_ll_botpose[7] >= 1):
                 self.add_vision_measurement(Pose2d(Translation2d(gp_ll_botpose[0], gp_ll_botpose[1]),
                                                    Rotation2d.fromDegrees((gp_ll_botpose[5] + 360) % 360)),
-                                            utils.get_current_time_seconds() - (gp_ll_botpose[6]))
+                                            utils.get_current_time_seconds() - (gp_ll_botpose[6] / 1000.0),
+                                            (0.2, 0.2, 999999999))
+            elif (odo2_ll_botpose[9] < odo_ll_botpose[9] < 10 and gp_ll_botpose < gp_ll_botpose[9] < 10 and
+                  odo2_ll_botpose[7] >= 1):
+                self.add_vision_measurement(Pose2d(Translation2d(odo2_ll_botpose[0], odo2_ll_botpose[1]),
+                                                   Rotation2d.fromDegrees((odo2_ll_botpose[5] + 360) % 360)),
+                                            utils.get_current_time_seconds() - (odo2_ll_botpose[6] / 1000.0),
+                                            (0.2, 0.2, 999999999))
         else:
-            if odo_ll_botpose[9] < 10 and odo_ll_botpose[7] >= 1:
+            if odo_ll_botpose[9] < odo2_ll_botpose[9] < 10 and odo_ll_botpose[7] >= 1:
                 SmartDashboard.putBoolean("Valid AprilTag Detected?", True)
                 self.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]),
                                                    Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
                                             utils.get_current_time_seconds() - (odo_ll_botpose[6] / 1000.0),
+                                            (0.2, 0.2, 999999999))
+            elif odo2_ll_botpose[9] < odo_ll_botpose[9] < 10 and odo2_ll_botpose[7] >= 1:
+                SmartDashboard.putBoolean("Valid AprilTag Detected?", True)
+                self.add_vision_measurement(Pose2d(Translation2d(odo2_ll_botpose[0], odo2_ll_botpose[1]),
+                                                   Rotation2d.fromDegrees((odo2_ll_botpose[5] + 360) % 360)),
+                                            utils.get_current_time_seconds() - (odo2_ll_botpose[6] / 1000.0),
                                             (0.2, 0.2, 999999999))
             else:
                 SmartDashboard.putBoolean("Valid AprilTag Detected?", False)
