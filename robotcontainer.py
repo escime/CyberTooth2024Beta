@@ -28,6 +28,7 @@ from commands.drive_to_gamepiece import DriveToGamePiece
 from commands.drive_aligned import DriveAligned
 from commands.auto_alignment_leds import AutoAlignmentLEDs
 from commands.grid_aligned import GridAligned
+from commands.auto_alignment import AutoAlignment
 
 
 class RobotContainer:
@@ -40,15 +41,15 @@ class RobotContainer:
 
     def __init__(self) -> None:
         # Start master timer. ------------------------------------------------------------------------------------------
-        # TODO Is this necessary? Is it just for filed commands?
         self.timer = Timer()
         self.timer.start()
 
         # Configure system logging. ------------------------------------------------------------------------------------
         if wpilib.RobotBase.isReal():
+            # DataLogManager.start()
+            # DriverStation.startDataLog(DataLogManager.getLog(), True)
             print("Not a simulation, logging enabled!")
-            DataLogManager.start()
-            DriverStation.startDataLog(DataLogManager.getLog(), True)
+            print("Logging disabled, commented out.")
         else:
             print("Simulated, logging disabled.")
 
@@ -218,7 +219,7 @@ class RobotContainer:
 
         # Drive to game piece
         button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).whileTrue(
-            DriveToGamePiece(self.drivetrain, self.arm))
+            DriveToGamePiece(self.drivetrain, self.arm, self.driver_controller))
 
         # Vibrate the controller when a game piece is in view
         button.Trigger(lambda: self.drivetrain.get_gp_in_view()).onTrue(
@@ -243,23 +244,34 @@ class RobotContainer:
         button.Trigger(lambda: self.driver_controller.get_button("Y") and not self.test_bindings and
                        DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
             SequentialCommandGroup(
-                runOnce(lambda: self.drivetrain.seed_field_relative(Pose2d(15.19, 5.55, Rotation2d.fromDegrees(180))),
+                runOnce(lambda: self.drivetrain.reset_pose(Pose2d(15.19, 5.55, Rotation2d.fromDegrees(180))),
                         self.drivetrain),
                 runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(180)))
             ))
         button.Trigger(lambda: self.driver_controller.get_button("Y") and not self.test_bindings and
                        DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
             SequentialCommandGroup(
-                runOnce(lambda: self.drivetrain.seed_field_relative(Pose2d(1.5, 5.55, Rotation2d.fromDegrees(0))),
+                runOnce(lambda: self.drivetrain.reset_pose(Pose2d(1.5, 5.55, Rotation2d.fromDegrees(0))),
                         self.drivetrain),
                 runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(0)))
             ))
 
         # Scoring grid alignment
+        # (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
+        #     .whileTrue(
+        #     GridAligned(self.drivetrain, self.util, self.arm, 8.29, 90.0001, True, self.driver_controller)
+        # ))
+
         (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
-            .whileTrue(
-            GridAligned(self.drivetrain, self.util, self.arm, 8.29, 90.0001, True, self.driver_controller)
+         .whileTrue(
+            AutoAlignment(self.drivetrain, self.util, self.arm, True, self.driver_controller)
         ))
+
+        button.Trigger(lambda: self.driver_controller.get_button("LB") and not self.test_bindings).onTrue(
+            runOnce(lambda: self.arm.set_state("shoot"), self.arm)
+        ).onFalse(
+            runOnce(lambda: self.arm.set_state("stow"), self.arm)
+        )
 
         # Activate autonomous misalignment lights.
         button.Trigger(lambda: SmartDashboard.getBoolean("Misalignment Indicator Active?", False)).whileTrue(
@@ -267,24 +279,24 @@ class RobotContainer:
             .ignoringDisable(True)
         )
 
-        # Grid scoring controls.
-        button.Trigger(lambda: self.operator_controller.get_d_pad_pull("E")).onTrue(
-            runOnce(lambda: self.util.increment_grid_position(1, 0), self.util).ignoringDisable(True)
+        # Grid Scoring Controls
+        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E")).onTrue(
+            runOnce(lambda: self.util.cycle_scoring_locations(1), self.util).ignoringDisable(True)
         )
-        button.Trigger(lambda: self.operator_controller.get_d_pad_pull("W")).onTrue(
-            runOnce(lambda: self.util.increment_grid_position(-1, 0), self.util).ignoringDisable(True)
+        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W")).onTrue(
+            runOnce(lambda: self.util.cycle_scoring_locations(-1), self.util).ignoringDisable(True)
         )
         button.Trigger(lambda: self.operator_controller.get_d_pad_pull("N")).onTrue(
-            runOnce(lambda: self.util.increment_grid_position(0, 1), self.util).ignoringDisable(True)
+            runOnce(lambda: self.util.cycle_scoring_setpoints(1), self.util).ignoringDisable(True)
         )
         button.Trigger(lambda: self.operator_controller.get_d_pad_pull("S")).onTrue(
-            runOnce(lambda: self.util.increment_grid_position(0, -1), self.util).ignoringDisable(True)
+            runOnce(lambda: self.util.cycle_scoring_setpoints(-1), self.util).ignoringDisable(True)
         )
 
         # Configuration for telemetry.
-        if utils.is_simulation():
-            self.drivetrain.seed_field_relative(Pose2d())
-        self.drivetrain.register_telemetry(lambda state: self._logger.telemeterize(state))
+        self.drivetrain.register_telemetry(
+            lambda state: self._logger.telemeterize(state)
+        )
 
     def getAutonomousCommand(self) -> Command:
         """Use this to pass the autonomous command to the main Robot class.

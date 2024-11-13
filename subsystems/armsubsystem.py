@@ -8,7 +8,7 @@ from phoenix6.status_code import StatusCode
 from phoenix6.signals import InvertedValue
 from phoenix6.utils import get_current_time_seconds, is_simulation
 
-from rev import CANSparkMax
+from rev import SparkMax, SparkBaseConfig, SparkBase
 
 from wpilib import Mechanism2d, Color8Bit, Color, SmartDashboard, DigitalInput
 from wpilib.simulation import SingleJointedArmSim
@@ -53,10 +53,12 @@ class ArmSubsystem(Subsystem):
         self.elbow_slot0_configs.with_k_p(90)
         self.elbow_slot0_configs.with_k_i(0)
         self.elbow_slot0_configs.with_k_d(0)
-        
-        self.intake = CANSparkMax(31, CANSparkMax.MotorType.kBrushless)
-        self.intake.setSmartCurrentLimit(60)
-        self.intake.setIdleMode(CANSparkMax.IdleMode.kBrake)
+
+        self.intake = SparkMax(31, SparkMax.MotorType.kBrushless)
+        intake_config = SparkBaseConfig().smartCurrentLimit(40, 60).inverted(True)
+        self.intake.configure(intake_config, SparkMax.ResetMode.kResetSafeParameters,
+                              SparkMax.PersistMode.kPersistParameters)
+
         self.intake.set(0)
 
         self.gp_sensor = DigitalInput(0)

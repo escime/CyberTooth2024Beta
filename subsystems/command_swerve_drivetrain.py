@@ -31,8 +31,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
     _RED_ALLIANCE_PERSPECTIVE_ROTATION = Rotation2d.fromDegrees(180)
     """Red alliance sees forward as 180 degrees (toward blue alliance wall)"""
 
-    auto_request = swerve.requests.ApplyChassisSpeeds().with_drive_request_type(
-        swerve.SwerveModule.DriveRequestType.VELOCITY)
+    auto_request = swerve.requests.ApplyRobotSpeeds()
 
     @overload
     def __init__(self, drivetrain_constants: swerve.SwerveDrivetrainConstants,
@@ -52,12 +51,36 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         ...
 
     @overload
-    def __init__(self, drivetrain_constants: swerve.SwerveDrivetrainConstants, odometry_update_frequency: units.hertz,
-                 modules: list[swerve.SwerveModuleConstants]) -> None:
+    def __init__(
+            self,
+            drivetrain_constants: swerve.SwerveDrivetrainConstants,
+            modules: list[swerve.SwerveModuleConstants],
+    ) -> None:
         """
         Constructs a CTRE SwerveDrivetrain using the specified constants.
 
-        This constructs the underlying hardware devices, so user should not construct
+        This constructs the underlying hardware devices, so users should not construct
+        the devices themselves. If they need the devices, they can access them through
+        getters in the classes.
+
+        :param driveTrainConstants: Drivetrain-wide constants for the swerve drive
+        :type driveTrainConstants:  swerve.SwerveDrivetrainConstants
+        :param modules:             Constants for each specific module
+        :type modules:              list[swerve.SwerveModuleConstants]
+        """
+        ...
+
+    @overload
+    def __init__(
+            self,
+            drivetrain_constants: swerve.SwerveDrivetrainConstants,
+            odometry_update_frequency: units.hertz,
+            modules: list[swerve.SwerveModuleConstants],
+    ) -> None:
+        """
+        Constructs a CTRE SwerveDrivetrain using the specified constants.
+
+        This constructs the underlying hardware devices, so users should not construct
         the devices themselves. If they need the devices, they can access them through
         getters in the classes.
 
@@ -79,12 +102,12 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
             odometry_update_frequency: units.hertz,
             odometry_standard_deviation: tuple[float, float, float],
             vision_standard_deviation: tuple[float, float, float],
-            modules: list[swerve.SwerveModuleConstants]
+            modules: list[swerve.SwerveModuleConstants],
     ) -> None:
         """
         Constructs a CTRE SwerveDrivetrain using the specified constants.
 
-        This constructs the underlying hardware devices, so user should not construct
+        This constructs the underlying hardware devices, so users should not construct
         the devices themselves. If they need the devices, they can access them through
         getters in the classes.
 
@@ -156,46 +179,71 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.ay_robot = 0
         self.alpha_robot = 0
 
-        # Setup Orchestra.
-        self.orchestra = orchestra.Orchestra()
-        for i in range(0, 4):
-            self.orchestra.add_instrument(self.modules[i].drive_motor)
-            self.orchestra.add_instrument(self.modules[i].steer_motor)
-        # self.orchestra.load_music("affirmative.chrp")
+        self._translation_characterization = swerve.requests.SysIdSwerveTranslation()
+        self._steer_characterization = swerve.requests.SysIdSwerveSteerGains()
+        self._rotation_characterization = swerve.requests.SysIdSwerveRotation()
 
         # Setup SYSID Routines.
         self.sys_id_routine_translation = sysid.SysIdRoutine(
             sysid.SysIdRoutine.Config(
+                # Use default ramp rate (1 V/s) and timeout (10 s)
+                # Reduce dynamic voltage to 4 V to prevent brownout
                 stepVoltage=4.0,
-                recordState=lambda state: SignalLogger.write_string("state", SysIdRoutineLog.stateEnumToString(state))
+                # Log state with SignalLogger class
+                recordState=lambda state: SignalLogger.write_string(
+                    "SysIdTranslation_State", SysIdRoutineLog.stateEnumToString(state)
+                ),
             ),
             sysid.SysIdRoutine.Mechanism(
-                lambda volts: self.set_control(swerve.requests.SysIdSwerveTranslation().with_volts(volts)),
+                lambda output: self.set_control(
+                    self._translation_characterization.with_volts(output)
+                ),
                 lambda log: None,
-                self
-            )
+                self,
+            ),
         )
         self.sys_id_routine_rotation = sysid.SysIdRoutine(
             sysid.SysIdRoutine.Config(
-                stepVoltage=4.0,
-                recordState=lambda state: SignalLogger.write_string("state", SysIdRoutineLog.stateEnumToString(state))
+                # This is in radians per second², but SysId only supports "volts per second"
+                rampRate=math.pi / 6,
+                # Use dynamic voltage of 7 V
+                stepVoltage=7.0,
+                # Use default timeout (10 s)
+                # Log state with SignalLogger class
+                recordState=lambda state: SignalLogger.write_string(
+                    "SysIdSteer_State", SysIdRoutineLog.stateEnumToString(state)
+                ),
             ),
             sysid.SysIdRoutine.Mechanism(
-                lambda volts: self.set_control(swerve.requests.SysIdSwerveRotation().with_volts(volts)),
+                lambda output: (
+                    # output is actually radians per second, but SysId only supports "volts"
+                    self.set_control(
+                        self._rotation_characterization.with_rotational_rate(output)
+                    ),
+                    # also log the requested output for SysId
+                    SignalLogger.write_double("Rotational_Rate", output),
+                ),
                 lambda log: None,
-                self
-            )
+                self,
+            ),
         )
-        self.sys_id_routine_steer = sysid.SysIdRoutine(
+        self.sys_id_routine_steer = self._sys_id_routine_steer = sysid.SysIdRoutine(
             sysid.SysIdRoutine.Config(
-                stepVoltage=4.0,
-                recordState=lambda state: SignalLogger.write_string("state", SysIdRoutineLog.stateEnumToString(state))
+                # Use default ramp rate (1 V/s) and timeout (10 s)
+                # Use dynamic voltage of 7 V
+                stepVoltage=7.0,
+                # Log state with SignalLogger class
+                recordState=lambda state: SignalLogger.write_string(
+                    "SysIdSteer_State", SysIdRoutineLog.stateEnumToString(state)
+                ),
             ),
             sysid.SysIdRoutine.Mechanism(
-                lambda volts: self.set_control(swerve.requests.SysIdSwerveSteerGains().with_volts(volts)),
+                lambda output: self.set_control(
+                    self._steer_characterization.with_volts(output)
+                ),
                 lambda log: None,
-                self
-            )
+                self,
+            ),
         )
 
     def apply_request(self, request: Callable[[], swerve.requests.SwerveRequest]) -> Command:
@@ -229,9 +277,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.limelight_periodic()
 
         # Update robot velocity and acceleration.
-        self.vel_acc_periodic()
-
-        SmartDashboard.putBoolean("Orchestra Active", self.orchestra.is_playing())
+        # self.vel_acc_periodic()
 
     def vel_acc_periodic(self) -> None:
         """Calculates the instantaneous robot velocity and acceleration."""
@@ -256,6 +302,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         SmartDashboard.putNumber("Robot Linear Speed", math.sqrt((self.vx_new * self.vx_new) + (self.vy_new * self.vy_new)))
         SmartDashboard.putBoolean("Robot Slipping X", self.get_slip_detected()[0])
         SmartDashboard.putBoolean("Robot Slipping Y", self.get_slip_detected()[1])
+        SmartDashboard.putNumber("Robot Heading", self.get_pose().rotation().degrees())
         self.get_slip_detected()
 
     def limelight_periodic(self) -> None:
@@ -283,20 +330,20 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                                             utils.get_current_time_seconds() - (gp_ll_botpose[6]))
         else:
             if odo_ll_botpose[9] < 10 and odo_ll_botpose[7] >= 1:
-                SmartDashboard.putBoolean("Valid AprilTag Detected?", True)
+                # SmartDashboard.putBoolean("Valid AprilTag Detected?", True)
                 self.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]),
                                                    Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
                                             utils.get_current_time_seconds() - (odo_ll_botpose[6] / 1000.0),
                                             (0.2, 0.2, 999999999))
-            else:
-                SmartDashboard.putBoolean("Valid AprilTag Detected?", False)
+            # else:
+                # SmartDashboard.putBoolean("Valid AprilTag Detected?", False)
             if self.gp_ll_table.getEntry("tv").getDouble(-1) == 1:
                 self.tx = self.gp_ll_table.getEntry("tx").getDouble(0)
                 self.add_gp_to_detected_list(self.estimate_gp_location())
-                SmartDashboard.putString("GP Locations", str(self.gp_locations))
+                # SmartDashboard.putString("GP Locations", str(self.gp_locations))
             else:
                 self.remove_gp_from_detected_list()
-                SmartDashboard.putString("GP Locations", str(self.gp_locations))
+                # SmartDashboard.putString("GP Locations", str(self.gp_locations))
 
     def estimate_gp_location(self) -> [float, float, float]:
         h = (self.gp_ll_table.getEntry("ta").getDouble(0) * 0.01 * 788.644 + 1.692) * 0.0254  # 1 replaced with empirical ratio
@@ -409,17 +456,22 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
     def configure_pathplanner(self) -> None:
         """Configures all pathplanner settings."""
         AutoBuilder.configure(
-            self.get_pose,
-            self.seed_field_relative,
-            self.get_chassis_speeds,
-            lambda speeds, feedforwards: self.set_control(self.auto_request.with_speeds(speeds)),
+            lambda: self.get_state().pose,
+            self.reset_pose,
+            lambda: self.get_state().speeds,
+            lambda speeds, feedforwards: self.set_control(
+                self.auto_request
+                .with_speeds(speeds)
+                .with_wheel_force_feedforwards_x(feedforwards.robotRelativeForcesXNewtons)
+                .with_wheel_force_feedforwards_y(feedforwards.robotRelativeForcesYNewtons)
+            ),
             PPHolonomicDriveController(
                 PIDConstants(AutoConstants.x_pid[0], AutoConstants.x_pid[1], AutoConstants.x_pid[2]),
                 PIDConstants(AutoConstants.y_pid[0], AutoConstants.y_pid[1], AutoConstants.y_pid[2]),
                 AutoConstants.speed_at_12_volts,
             ),
             self.config,
-            self.get_path_flip,
+            lambda: (DriverStation.getAlliance() or DriverStation.Alliance.kBlue) == DriverStation.Alliance.kRed,
             self
         )
 
@@ -448,23 +500,6 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
     def set_pathplanner_rotation_override(self, override: str) -> None:
         """Sets whether pathplanner uses an alternate heading controller."""
         self.pathplanner_rotation_overridden = override
-
-    def load_sound(self, sound: str) -> None:
-        """Prepares drivetrain Krakens to play a sound."""
-        for i in range(0, 4):
-            self.orchestra.add_instrument(self.modules[i].drive_motor)
-            self.orchestra.add_instrument(self.modules[i].steer_motor)
-        if sound == "affirmative":
-            self.orchestra.load_music("meme1.chrp")
-        elif sound == "negative":
-            self.orchestra.load_music("negative.chrp")
-        else:
-            self.orchestra.load_music("invalid_sound.chrp")
-        self.orchestra.play()
-
-    def clear_orchestra(self) -> None:
-        self.orchestra.stop()
-        self.orchestra.clear_instruments()
 
     def get_gp_in_view(self) -> bool:
         return self.gp_ll_table.getEntry("tv").getDouble(-1) == 1

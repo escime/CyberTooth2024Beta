@@ -1,6 +1,7 @@
-from phoenix6 import configs, swerve, units
+from phoenix6 import CANBus, configs, swerve, units
 from subsystems.command_swerve_drivetrain import CommandSwerveDrivetrain
 from wpimath.units import inchesToMeters
+
 
 class TunerConstants:
     """
@@ -14,15 +15,22 @@ class TunerConstants:
     # output type specified by SwerveModuleConstants.SteerMotorClosedLoopOutput
     _steer_gains = (
         configs.Slot0Configs()
-            .with_k_p(100).with_k_i(0).with_k_d(0.2)
-            .with_k_s(0).with_k_v(1.5).with_k_a(0)
+        .with_k_p(100)
+        .with_k_i(0)
+        .with_k_d(1)
+        .with_k_s(0.58691)
+        .with_k_v(1.9077)
+        .with_k_a(0)
     )
     # When using closed-loop control, the drive motor uses the control
     # output type specified by SwerveModuleConstants.DriveMotorClosedLoopOutput
     _drive_gains = (
         configs.Slot0Configs()
-            .with_k_p(0.1).with_k_i(0).with_k_d(0)
-            .with_k_s(0.0087663).with_k_v(0.11467).with_k_a(0.0088035)
+        .with_k_p(0.073625)
+        .with_k_i(0)
+        .with_k_d(0)
+        .with_k_s(0.15105)
+        .with_k_v(0.11667)
     )
 
     # The closed-loop output type to use for the steer motors;
@@ -32,35 +40,25 @@ class TunerConstants:
     # This affects the PID/FF gains for the drive motors
     _drive_closed_loop_output = swerve.ClosedLoopOutputType.VOLTAGE
 
+    # The remote sensor feedback type to use for the steer motors;
+    # When not Pro-licensed, FusedCANcoder/SyncCANcoder automatically fall back to RemoteCANcoder
+    _steer_feedback_type = swerve.SteerFeedbackType.FUSED_CANCODER
+
     # The stator current at which the wheels start to slip;
     # This needs to be tuned to your individual robot
     _slip_current: units.ampere = 120.0
 
     # Initial configs for the drive and steer motors and the CANcoder; these cannot be null.
     # Some configs will be overwritten; check the `with_*_initial_configs()` API documentation.
-    _drive_initial_configs = (
-        configs.TalonFXConfiguration()
-            .with_current_limits(
-                configs.CurrentLimitsConfigs()
-                    .with_stator_current_limit(110)
-                    .with_stator_current_limit_enable(True)
-                    .with_supply_current_limit(40)
-                    .with_stator_current_limit_enable(True)
-                    .with_supply_current_lower_time(0.5)
-        )
+    _drive_initial_configs = configs.TalonFXConfiguration().with_current_limits(
+        configs.CurrentLimitsConfigs()
+        .with_stator_current_limit(40).with_stator_current_limit_enable(True)
     )
-    _steer_initial_configs = (
-        configs.TalonFXConfiguration()
-            .with_current_limits(
-                configs.CurrentLimitsConfigs()
-                    # Swerve azimuth does not require much torque output, so we can set a relatively low
-                    # stator current limit to help avoid brownouts without impacting performance.
-                    .with_stator_current_limit(80)
-                    .with_stator_current_limit_enable(True)
-                    .with_supply_current_limit(40)
-                    .with_supply_current_limit_enable(True)
-                    .with_supply_current_lower_time(0.2)
-            )
+    _steer_initial_configs = configs.TalonFXConfiguration().with_current_limits(
+        configs.CurrentLimitsConfigs()
+        # Swerve azimuth does not require much torque output, so we can set a relatively low
+        # stator current limit to help avoid brownouts without impacting performance.
+        .with_stator_current_limit(40).with_stator_current_limit_enable(True)
     )
     _cancoder_initial_configs = configs.CANcoderConfiguration()
     # Configs for the Pigeon 2; leave this None to skip applying Pigeon 2 configs
@@ -81,7 +79,7 @@ class TunerConstants:
     _invert_left_side = False
     _invert_right_side = True
 
-    _canbus = "rio"
+    _canbus = CANBus("", "./logs/example.hoot")
     _pigeon_id = 9
 
 
@@ -92,33 +90,33 @@ class TunerConstants:
     _steer_friction_voltage: units.volt = 0.25
     _drive_friction_voltage: units.volt = 0.25
 
-    _drivetrain_constants = (
+    drivetrain_constants = (
         swerve.SwerveDrivetrainConstants()
-            .with_can_bus_name(_canbus)
-            .with_pigeon2_id(_pigeon_id)
-            .with_pigeon2_configs(_pigeon_configs)
+        .with_can_bus_name(_canbus.name)
+        .with_pigeon2_id(_pigeon_id)
+        .with_pigeon2_configs(_pigeon_configs)
     )
 
     _constants_creator = (
         swerve.SwerveModuleConstantsFactory()
-            .with_drive_motor_gear_ratio(_drive_gear_ratio)
-            .with_steer_motor_gear_ratio(_steer_gear_ratio)
-            .with_coupling_gear_ratio(_couple_ratio)
-            .with_wheel_radius(_wheel_radius)
-            .with_steer_motor_gains(_steer_gains)
-            .with_drive_motor_gains(_drive_gains)
-            .with_steer_motor_closed_loop_output(_steer_closed_loop_output)
-            .with_drive_motor_closed_loop_output(_drive_closed_loop_output)
-            .with_slip_current(_slip_current)
-            .with_speed_at12_volts(speed_at_12_volts)
-            .with_feedback_source(swerve.SteerFeedbackType.FUSED_CANCODER)
-            .with_drive_motor_initial_configs(_drive_initial_configs)
-            .with_steer_motor_initial_configs(_steer_initial_configs)
-            .with_cancoder_initial_configs(_cancoder_initial_configs)
-            .with_steer_inertia(_steer_inertia)
-            .with_drive_inertia(_drive_inertia)
-            .with_steer_friction_voltage(_steer_friction_voltage)
-            .with_drive_friction_voltage(_drive_friction_voltage)
+        .with_drive_motor_gear_ratio(_drive_gear_ratio)
+        .with_steer_motor_gear_ratio(_steer_gear_ratio)
+        .with_coupling_gear_ratio(_couple_ratio)
+        .with_wheel_radius(_wheel_radius)
+        .with_steer_motor_gains(_steer_gains)
+        .with_drive_motor_gains(_drive_gains)
+        .with_steer_motor_closed_loop_output(_steer_closed_loop_output)
+        .with_drive_motor_closed_loop_output(_drive_closed_loop_output)
+        .with_slip_current(_slip_current)
+        .with_speed_at12_volts(speed_at_12_volts)
+        .with_feedback_source(_steer_feedback_type)
+        .with_drive_motor_initial_configs(_drive_initial_configs)
+        .with_steer_motor_initial_configs(_steer_initial_configs)
+        .with_cancoder_initial_configs(_cancoder_initial_configs)
+        .with_steer_inertia(_steer_inertia)
+        .with_drive_inertia(_drive_inertia)
+        .with_steer_friction_voltage(_steer_friction_voltage)
+        .with_drive_friction_voltage(_drive_friction_voltage)
     )
 
 
@@ -126,7 +124,7 @@ class TunerConstants:
     _front_left_drive_motor_id = 10
     _front_left_steer_motor_id = 11
     _front_left_encoder_id = 12
-    _front_left_encoder_offset: units.rotation = -0.229248046875
+    _front_left_encoder_offset: units.rotation = -0.226318359375
     _front_left_steer_motor_inverted = True
 
     _front_left_x_pos: units.meter = inchesToMeters(9.75)
@@ -136,7 +134,7 @@ class TunerConstants:
     _front_right_drive_motor_id = 13
     _front_right_steer_motor_id = 14
     _front_right_encoder_id = 15
-    _front_right_encoder_offset: units.rotation = 0.17138671875
+    _front_right_encoder_offset: units.rotation = 0.17333984375
     _front_right_steer_motor_inverted = True
 
     _front_right_x_pos: units.meter = inchesToMeters(9.75)
@@ -146,7 +144,7 @@ class TunerConstants:
     _back_left_drive_motor_id = 16
     _back_left_steer_motor_id = 17
     _back_left_encoder_id = 18
-    _back_left_encoder_offset: units.rotation = 0.010986328125
+    _back_left_encoder_offset: units.rotation = 0.10498046875
     _back_left_steer_motor_inverted = True
 
     _back_left_x_pos: units.meter = inchesToMeters(-9.75)
@@ -156,28 +154,52 @@ class TunerConstants:
     _back_right_drive_motor_id = 19
     _back_right_steer_motor_id = 20
     _back_right_encoder_id = 21
-    _back_right_encoder_offset: units.rotation = -0.212158203125
+    _back_right_encoder_offset: units.rotation = -0.213623046875
     _back_right_steer_motor_inverted = True
 
     _back_right_x_pos: units.meter = inchesToMeters(-9.75)
     _back_right_y_pos: units.meter = inchesToMeters(-9.75)
 
 
-    _front_left = _constants_creator.create_module_constants(
-        _front_left_drive_motor_id, _front_left_steer_motor_id, _front_left_encoder_id, _front_left_encoder_offset,
-        _front_left_x_pos, _front_left_y_pos, _invert_left_side, _front_left_steer_motor_inverted
+    front_left = _constants_creator.create_module_constants(
+        _front_left_steer_motor_id,
+        _front_left_drive_motor_id,
+        _front_left_encoder_id,
+        _front_left_encoder_offset,
+        _front_left_x_pos,
+        _front_left_y_pos,
+        _invert_left_side,
+        _front_left_steer_motor_inverted,
     )
-    _front_right = _constants_creator.create_module_constants(
-        _front_right_drive_motor_id, _front_right_steer_motor_id, _front_right_encoder_id, _front_right_encoder_offset,
-        _front_right_x_pos, _front_right_y_pos, _invert_right_side, _front_right_steer_motor_inverted
+    front_right = _constants_creator.create_module_constants(
+        _front_right_steer_motor_id,
+        _front_right_drive_motor_id,
+        _front_right_encoder_id,
+        _front_right_encoder_offset,
+        _front_right_x_pos,
+        _front_right_y_pos,
+        _invert_right_side,
+        _front_right_steer_motor_inverted,
     )
-    _back_left = _constants_creator.create_module_constants(
-        _back_left_drive_motor_id, _back_left_steer_motor_id, _back_left_encoder_id, _back_left_encoder_offset,
-        _back_left_x_pos, _back_left_y_pos, _invert_left_side, _back_left_steer_motor_inverted
+    back_left = _constants_creator.create_module_constants(
+        _back_left_steer_motor_id,
+        _back_left_drive_motor_id,
+        _back_left_encoder_id,
+        _back_left_encoder_offset,
+        _back_left_x_pos,
+        _back_left_y_pos,
+        _invert_left_side,
+        _back_left_steer_motor_inverted,
     )
-    _back_right = _constants_creator.create_module_constants(
-        _back_right_drive_motor_id, _back_right_steer_motor_id, _back_right_encoder_id, _back_right_encoder_offset,
-        _back_right_x_pos, _back_right_y_pos, _invert_right_side, _back_right_steer_motor_inverted
+    back_right = _constants_creator.create_module_constants(
+        _back_right_steer_motor_id,
+        _back_right_drive_motor_id,
+        _back_right_encoder_id,
+        _back_right_encoder_offset,
+        _back_right_x_pos,
+        _back_right_y_pos,
+        _invert_right_side,
+        _back_right_steer_motor_inverted,
     )
 
     @classmethod
@@ -186,4 +208,12 @@ class TunerConstants:
         Creates a CommandSwerveDrivetrain instance.
         This should only be called once in your robot program.
         """
-        return CommandSwerveDrivetrain(clazz._drivetrain_constants, [clazz._front_left, clazz._front_right, clazz._back_left, clazz._back_right])
+        return CommandSwerveDrivetrain(
+            clazz.drivetrain_constants,
+            [
+                clazz.front_left,
+                clazz.front_right,
+                clazz.back_left,
+                clazz.back_right,
+            ],
+        )

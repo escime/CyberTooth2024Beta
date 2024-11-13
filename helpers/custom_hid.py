@@ -19,10 +19,10 @@ class CustomHID:
             self.controller = Joystick(port)
             self.controller_type = "generic"
 
-        self.slew_limiter_lx = SlewRateLimiter(5, -5, 0)  # 3
-        self.slew_limiter_ly = SlewRateLimiter(5, -5, 0)
-        self.slew_limiter_rx = SlewRateLimiter(5, -5, 0)
-        self.slew_limiter_ry = SlewRateLimiter(5, -5, 0)
+        self.slew_limiter_lx = SlewRateLimiter(7, -7, 0)  # 3
+        self.slew_limiter_ly = SlewRateLimiter(7, -7, 0)
+        self.slew_limiter_rx = SlewRateLimiter(7, -7, 0)
+        self.slew_limiter_ry = SlewRateLimiter(7, -7, 0)
 
     def reset_controller(self, hid, port):
         if hid == "xbox":
