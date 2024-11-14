@@ -471,7 +471,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                 AutoConstants.speed_at_12_volts,
             ),
             self.config,
-            lambda: (DriverStation.getAlliance() or DriverStation.Alliance.kBlue) == DriverStation.Alliance.kRed,
+            lambda: DriverStation.getAlliance() == DriverStation.Alliance.kRed,
             self
         )
 

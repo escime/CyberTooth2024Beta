@@ -25,14 +25,14 @@ class UtilSubsystem(Subsystem):
 
         self.scoring_location = 0
         self.scoring_locations_red = [
-            [13.259, 4.111, 180.001],
-            [10.929, 5.364, 120],
-            [10.929, 2.8, 60]
+            [13.259, 4.111, 180.001, "Red Podium"],
+            [10.929, 5.364, 120, "Red Amp"],
+            [10.929, 2.8, 60, "Red Source"]
         ]
         self.scoring_locations_blue = [
-            [16.5 - self.scoring_locations_red[0][0], 4.111, 0.001],
-            [16.5 - self.scoring_locations_red[2][0], 2.8, 300],
-            [16.5 - self.scoring_locations_red[1][0], 5.364, 240]
+            [16.5 - self.scoring_locations_red[0][0], 4.111, 0.001, "Blue Podium"],
+            [16.5 - self.scoring_locations_red[2][0], 2.8, 300, "Blue Source"],
+            [16.5 - self.scoring_locations_red[1][0], 5.364, 240, "Blue Amp"]
         ]
 
         self.scoring_setpoint = 0
@@ -79,11 +79,15 @@ class UtilSubsystem(Subsystem):
                 self.grid[self.grid_position[0]][self.grid_position[1]][1]]
 
     def periodic(self) -> None:
-        for j in range(0, self.grid_length[1]):
-            for i in range(0, self.grid_length[0]):
-                displaystr = "Scoring Grid " + str(j) + "|" + str(i)
-                if self.grid_position[0] == i and self.grid_position[1] == j:
-                    SmartDashboard.putBoolean(displaystr, True)
-                else:
-                    SmartDashboard.putBoolean(displaystr, False)
-
+        if DriverStation.getAlliance() == DriverStation.Alliance.kRed:
+            SmartDashboard.putString("Scoring Location", self.scoring_locations_red[self.scoring_location][3])
+        else:
+            SmartDashboard.putString("Scoring Location", self.scoring_locations_red[self.scoring_location][3])
+        SmartDashboard.putString("Scoring Setpoint", self.scoring_setpoints[self.scoring_setpoint])
+        # for j in range(0, self.grid_length[1]):
+        #     for i in range(0, self.grid_length[0]):
+        #         displaystr = "Scoring Grid " + str(j) + "|" + str(i)
+        #         if self.grid_position[0] == i and self.grid_position[1] == j:
+        #             SmartDashboard.putBoolean(displaystr, True)
+        #         else:
+        #             SmartDashboard.putBoolean(displaystr, False)

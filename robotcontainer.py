@@ -29,6 +29,7 @@ from commands.drive_aligned import DriveAligned
 from commands.auto_alignment_leds import AutoAlignmentLEDs
 from commands.grid_aligned import GridAligned
 from commands.auto_alignment import AutoAlignment
+from commands.profiled_target import ProfiledTarget
 
 
 class RobotContainer:
@@ -267,11 +268,19 @@ class RobotContainer:
             AutoAlignment(self.drivetrain, self.util, self.arm, True, self.driver_controller)
         ))
 
+        # Shoot over the non-intake side
         button.Trigger(lambda: self.driver_controller.get_button("LB") and not self.test_bindings).onTrue(
-            runOnce(lambda: self.arm.set_state("shoot"), self.arm)
+            runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm)
         ).onFalse(
             runOnce(lambda: self.arm.set_state("stow"), self.arm)
         )
+
+        # Use a profiled PID controller to target a location on the field.
+        button.Trigger(lambda: self.driver_controller.get_button("RB") and not self.test_bindings).whileTrue(
+            ParallelCommandGroup(
+                AlignmentLEDs(self.leds, self.drivetrain),
+                ProfiledTarget(self.drivetrain, self.arm, [16.5, 5.53])
+        ))
 
         # Activate autonomous misalignment lights.
         button.Trigger(lambda: SmartDashboard.getBoolean("Misalignment Indicator Active?", False)).whileTrue(

@@ -6,9 +6,9 @@ from subsystems.armsubsystem import ArmSubsystem
 from phoenix6 import swerve
 from wpimath.controller import PIDController
 from generated.tuner_constants import TunerConstants
-from wpimath.units import degreesToRadians, radiansToDegrees
+from wpimath.units import degreesToRadians, radiansToDegrees, metersToInches
 from math import sqrt, pow, cos, sin, atan2
-from wpilib import DriverStation
+from wpilib import DriverStation, SmartDashboard
 
 from helpers.custom_hid import CustomHID
 
@@ -79,7 +79,7 @@ class AutoAlignment(Command):
             y_output = 0
 
         self.drive.apply_request(lambda: (self.forward_request
-                                          .with_velocity_x(x_move * TunerConstants.speed_at_12_volts)
+                                          .with_velocity_x(x_move * TunerConstants.speed_at_12_volts * 0.35)
                                           .with_rotational_rate(rotate_output)
                                           .with_velocity_y(y_output * TunerConstants.speed_at_12_volts))).schedule()
 
@@ -93,7 +93,6 @@ class AutoAlignment(Command):
         x1 = self.target[0]
         c = 2
 
-        # TODO Angles greater than 180 currently don't work lol
         y2 = y1 + c * sin(degreesToRadians(alpha))
         x2 = x1 + c * cos(degreesToRadians(alpha))
         m = (y2 - y1) / (x2 - x1)
@@ -146,10 +145,12 @@ class AutoAlignment(Command):
     def get_vector_to_line(self, current_pose, alpha):
         xmin, ymin = self.get_closest_target_coordinates(current_pose, alpha)
 
-        print("current pose x: " + str(current_pose.x))
-        print("current pose y: " + str(current_pose.y))
-        print("xmin: " + str(xmin))
-        print("ymin: " + str(ymin))
+        # print("current pose x: " + str(current_pose.x))
+        # print("current pose y: " + str(current_pose.y))
+        # print("xmin: " + str(xmin))
+        # print("ymin: " + str(ymin))
+        SmartDashboard.putNumber("Perceived Alignment Error",
+                                 metersToInches(self.get_distance_to_line(current_pose, alpha)))
         if not self.flipped:
             if ymin > current_pose.y:
                 return -1 * self.get_distance_to_line(current_pose, alpha)
