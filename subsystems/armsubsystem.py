@@ -10,7 +10,7 @@ from phoenix6.utils import get_current_time_seconds, is_simulation
 
 from rev import SparkMax, SparkBaseConfig, SparkBase
 
-from wpilib import Mechanism2d, Color8Bit, Color, SmartDashboard, DigitalInput
+from wpilib import Mechanism2d, Color8Bit, Color, SmartDashboard, DigitalInput, Servo
 from wpilib.simulation import SingleJointedArmSim
 from wpimath.system.plant import DCMotor
 from wpimath.units import inchesToMeters, lbsToKilograms, radiansToRotations
@@ -93,6 +93,8 @@ class ArmSubsystem(Subsystem):
 
         self.elbow_volts = VoltageOut(0, False)
 
+        self.servo_test = Servo(1)
+
         self.last_time = get_current_time_seconds()
 
     def set_state(self, state: str) -> None:
@@ -130,6 +132,10 @@ class ArmSubsystem(Subsystem):
             return True
         else:
             return False
+
+    # TODO Check if this actually drives the servo properly
+    def set_servo(self, value: float) -> None:
+        self.servo_test.set(value)
 
     def update_sim(self):
         current_time = get_current_time_seconds()

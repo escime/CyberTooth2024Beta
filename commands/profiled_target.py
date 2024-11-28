@@ -21,7 +21,7 @@ class ProfiledTarget(Command):
                                  .with_drive_request_type(swerve.SwerveModule.DriveRequestType.VELOCITY))
 
         self.rotation_controller = ProfiledPIDController(0.13, 0, 0,
-                                                         TrapezoidProfile.Constraints(rotationsToDegrees(0.5),
+                                                         TrapezoidProfile.Constraints(rotationsToDegrees(0.75),
                                                                                       rotationsToDegrees(0.1)))
         self.rotation_controller.enableContinuousInput(-180, 180)
         self.rotation_controller.setTolerance(2)

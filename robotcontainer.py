@@ -7,10 +7,11 @@ from constants import OIConstants
 from subsystems.ledsubsystem import LEDs
 from subsystems.armsubsystem import ArmSubsystem
 from subsystems.utilsubsystem import UtilSubsystem
-from wpilib import SmartDashboard, SendableChooser, DriverStation, DataLogManager, Timer
+from wpilib import SmartDashboard, SendableChooser, DriverStation, DataLogManager, Timer, Alert
 from helpers.custom_hid import CustomHID
 from helpers.data_wrap import DataWrap
 from pathplannerlib.auto import NamedCommands, PathPlannerAuto
+from wpinet import PortForwarder
 
 from generated.tuner_constants import TunerConstants
 from telemetry import Telemetry
@@ -25,11 +26,12 @@ from commands.baseline import Baseline
 from commands.check_drivetrain import CheckDrivetrain
 from commands.alignment_leds import AlignmentLEDs
 from commands.drive_to_gamepiece import DriveToGamePiece
-from commands.drive_aligned import DriveAligned
+# from commands.drive_aligned import DriveAligned
 from commands.auto_alignment_leds import AutoAlignmentLEDs
-from commands.grid_aligned import GridAligned
-from commands.auto_alignment import AutoAlignment
+# from commands.grid_aligned import GridAligned
+# from commands.auto_alignment import AutoAlignment
 from commands.profiled_target import ProfiledTarget
+from commands.auto_alignment_auto_select import AutoAlignmentAutoSelect
 
 
 class RobotContainer:
@@ -45,14 +47,21 @@ class RobotContainer:
         self.timer = Timer()
         self.timer.start()
 
+        # Configure button to enable robot logging.
+        self.logging_button = SmartDashboard.putBoolean("Logging Enabled?", False)
+
         # Configure system logging. ------------------------------------------------------------------------------------
+        self.alert_logging_enabled = Alert("Robot Logging is Enabled", Alert.AlertType.kWarning)
         if wpilib.RobotBase.isReal():
-            # DataLogManager.start()
-            # DriverStation.startDataLog(DataLogManager.getLog(), True)
-            print("Not a simulation, logging enabled!")
-            print("Logging disabled, commented out.")
-        else:
-            print("Simulated, logging disabled.")
+            if SmartDashboard.getBoolean("Logging Enabled?", False) is True:
+                DataLogManager.start()
+                DriverStation.startDataLog(DataLogManager.getLog(), True)
+                self.alert_logging_enabled.set(True)
+            port_forwarder = PortForwarder()
+            for port in range(5800, 5810):
+                port_forwarder.add(port, "limelight.local", port)
+                port_forwarder.add(port+10, "limelight-gp.local", port)
+                Alert("Limelight ports forwarded.", Alert.AlertType.kWarning).set(True)
 
         # Startup subsystems. ------------------------------------------------------------------------------------------
         self.data_wrap = DataWrap()
@@ -265,8 +274,12 @@ class RobotContainer:
 
         (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
          .whileTrue(
-            AutoAlignment(self.drivetrain, self.util, self.arm, True, self.driver_controller)
+            AutoAlignmentAutoSelect(self.drivetrain, self.util, self.arm, True, self.driver_controller)
         ))
+
+        # (button.Trigger(lambda: self.driver_controller.get_button("B") and not self.test_bindings).whileTrue(
+        #     AutoAlignmentAutoSelect(self.drivetrain, self.util, self.arm, True, self.driver_controller)
+        # ))
 
         # Shoot over the non-intake side
         button.Trigger(lambda: self.driver_controller.get_button("LB") and not self.test_bindings).onTrue(
@@ -276,7 +289,7 @@ class RobotContainer:
         )
 
         # Use a profiled PID controller to target a location on the field.
-        button.Trigger(lambda: self.driver_controller.get_button("RB") and not self.test_bindings).whileTrue(
+        button.Trigger(lambda: self.driver_controller.get_button("B") and not self.test_bindings).whileTrue(
             ParallelCommandGroup(
                 AlignmentLEDs(self.leds, self.drivetrain),
                 ProfiledTarget(self.drivetrain, self.arm, [16.5, 5.53])
@@ -289,17 +302,37 @@ class RobotContainer:
         )
 
         # Grid Scoring Controls
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E")).onTrue(
-            runOnce(lambda: self.util.cycle_scoring_locations(1), self.util).ignoringDisable(True)
-        )
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W")).onTrue(
-            runOnce(lambda: self.util.cycle_scoring_locations(-1), self.util).ignoringDisable(True)
-        )
+        # button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E")).onTrue(
+        #     runOnce(lambda: self.util.cycle_scoring_locations(1), self.util).ignoringDisable(True)
+        # )
+        # button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W")).onTrue(
+        #     runOnce(lambda: self.util.cycle_scoring_locations(-1), self.util).ignoringDisable(True)
+        # )
         button.Trigger(lambda: self.operator_controller.get_d_pad_pull("N")).onTrue(
             runOnce(lambda: self.util.cycle_scoring_setpoints(1), self.util).ignoringDisable(True)
         )
         button.Trigger(lambda: self.operator_controller.get_d_pad_pull("S")).onTrue(
             runOnce(lambda: self.util.cycle_scoring_setpoints(-1), self.util).ignoringDisable(True)
+        )
+
+        # Servo Testing
+        button.Trigger(lambda: self.driver_controller.get_button("X")).onTrue(
+            runOnce(lambda: self.arm.set_servo(1), self.arm)
+        ).onFalse(
+            runOnce(lambda: self.arm.set_servo(0), self.arm)
+        )
+
+        button.Trigger(lambda: SmartDashboard.getBoolean("Logging Enabled?", False)).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: DataLogManager.start()),
+                runOnce(lambda: DriverStation.startDataLog(DataLogManager.getLog(), True)),
+                runOnce(lambda: self.alert_logging_enabled.set(True))
+            )
+        ).onFalse(
+            SequentialCommandGroup(
+                runOnce(lambda: DataLogManager.stop()),
+                runOnce(lambda: self.alert_logging_enabled.set(False))
+            )
         )
 
         # Configuration for telemetry.

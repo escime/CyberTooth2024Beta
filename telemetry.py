@@ -1,7 +1,8 @@
 from ntcore import NetworkTableInstance
 from phoenix6 import SignalLogger, swerve, units, utils
-from wpilib import Color, Color8Bit, Mechanism2d, MechanismLigament2d, SmartDashboard
+from wpilib import Color, Color8Bit, Mechanism2d, MechanismLigament2d, SmartDashboard, Field2d
 from wpimath.geometry import Pose2d
+from pathplannerlib.logging import PathPlannerLogging
 
 
 class Telemetry:
@@ -61,7 +62,7 @@ class Telemetry:
         ]
 
         # Attempt at adding pathplanner logging
-        # self._field_2d = Field2d()
+        self._field_2d = Field2d()
 
     def telemeterize(self, state: swerve.SwerveDrivetrain.SwerveDriveState):
         """
@@ -99,5 +100,5 @@ class Telemetry:
         SignalLogger.write_double_array("odometry", pose_array)
         SignalLogger.write_double("odom period", state.odometry_period, "seconds")
 
-        # SmartDashboard.putData("active_trajectory", self._field_2d)
-        # PathPlannerLogging.setLogActivePathCallback(lambda poses: self._field_2d.getObject('path').setPoses(poses))
+        SmartDashboard.putData("active_trajectory", self._field_2d)
+        PathPlannerLogging.setLogActivePathCallback(lambda poses: self._field_2d.getObject('path').setPoses(poses))

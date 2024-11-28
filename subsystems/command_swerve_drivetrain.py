@@ -3,10 +3,10 @@ import math
 from commands2 import Command, Subsystem, sysid
 from phoenix6 import swerve, units, utils, SignalLogger, orchestra
 from typing import Callable, overload
-from wpilib import DriverStation, Notifier, RobotController, SmartDashboard, Field2d
+from wpilib import DriverStation, Notifier, RobotController, SmartDashboard, Field2d, Alert
 # from wpiutil import Sendable, SendableBuilder
 from wpilib.sysid import SysIdRoutineLog
-from wpimath.geometry import Rotation2d, Pose2d, Translation2d
+from wpimath.geometry import Rotation2d, Pose2d, Translation2d, Translation3d, Rotation3d, Transform3d
 from pathplannerlib.auto import AutoBuilder
 from pathplannerlib.config import PIDConstants, RobotConfig
 from pathplannerlib.path import PathConstraints
@@ -14,8 +14,10 @@ from pathplannerlib.controller import PPHolonomicDriveController
 from pathplannerlib.commands import PathfindingCommand
 from constants import AutoConstants
 from ntcore import NetworkTableInstance
-# import types
-from helpers.data_wrap import DataWrap
+from photonlibpy.simulation import VisionSystemSim, SimCameraProperties, PhotonCameraSim
+from photonlibpy import photonCamera
+from robotpy_apriltag import AprilTagFieldLayout, AprilTagField
+from wpimath.units import degreesToRadians
 
 
 class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
@@ -179,6 +181,27 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.ay_robot = 0
         self.alpha_robot = 0
 
+        # Configure persistent alerts.
+        alert_photonvision_enabled = Alert("PhotonVision Simulation Enabled", Alert.AlertType.kWarning)
+
+        # Setup photonvision simulation.
+        if utils.is_simulation():
+            alert_photonvision_enabled.set(True)
+            self.vision_sim = VisionSystemSim("main")
+            self.vision_sim.addAprilTags(AprilTagFieldLayout.loadField(AprilTagField.k2024Crescendo))
+            camera_prop = SimCameraProperties()
+            camera_prop.setCalibrationFromFOV(640, 580, Rotation2d.fromDegrees(100))
+            camera_prop.setCalibError(0.25, 0.08)
+            camera_prop.setFPS(20)
+            camera_prop.setAvgLatency(0.01)
+            camera_prop.setLatencyStdDev(0.01)
+            camera = photonCamera.PhotonCamera("limelight")
+            camera_sim = PhotonCameraSim(camera, camera_prop)
+            robot_to_camera_trl = Translation3d(0, 0.2, 0)
+            robot_to_camera_rot = Rotation3d(degreesToRadians(0), degreesToRadians(-10), degreesToRadians(180))
+            robot_to_camera = Transform3d(robot_to_camera_trl, robot_to_camera_rot)
+            self.vision_sim.addCamera(camera_sim, robot_to_camera)
+
         self._translation_characterization = swerve.requests.SysIdSwerveTranslation()
         self._steer_characterization = swerve.requests.SysIdSwerveSteerGains()
         self._rotation_characterization = swerve.requests.SysIdSwerveRotation()
@@ -277,7 +300,34 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.limelight_periodic()
 
         # Update robot velocity and acceleration.
-        # self.vel_acc_periodic()
+        self.vel_acc_periodic()
+
+        # Update photonvision simulation.
+        self.photonvision_sim_periodic()
+
+    def photonvision_sim_periodic(self) -> None:
+        if utils.is_simulation():
+            self.vision_sim.update(self.get_pose())
+            acquired_array = SmartDashboard.getNumberArray("VisionSystemSim-main/Sim Field/visibleTargetPoses", [])
+            tag_count = 0
+            if acquired_array:
+                if len(acquired_array) > 3:
+                    SmartDashboard.putNumberArray("Visible Target 2", [acquired_array[3], acquired_array[4]])
+                    tag_count = 2
+                else:
+                    SmartDashboard.putNumberArray("Visible Target", [acquired_array[0], acquired_array[1]])
+                    SmartDashboard.putNumberArray("Visible Target 2", [])
+                    tag_count = 1
+            else:
+                SmartDashboard.putNumberArray("Visible Target", [])
+
+            sim_detect_robot_pose = SmartDashboard.getNumberArray("VisionSystemSim-main/Sim Field/Robot", [])
+            # SmartDashboard.putNumberArray("Photon Simulated Robot Pose", sim_detect_robot_pose)
+            if sim_detect_robot_pose:
+                self.odo_ll_table.putNumberArray("botpose_wpiblue", [sim_detect_robot_pose[0],
+                                                                     sim_detect_robot_pose[1], 0.0, 0.0, 0.0, 0.0, 0.0,
+                                                                     tag_count,
+                                                                     0.0, 0.0, 4, 0.0])
 
     def vel_acc_periodic(self) -> None:
         """Calculates the instantaneous robot velocity and acceleration."""
@@ -310,40 +360,27 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.odo_ll_table.putNumberArray("robot_orientation_set",
                                          [self.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
 
-        odo_ll_botpose = self.odo_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0,
-                                                                                           0.0, 0.0, 0.0, 0.0,
-                                                                                           0.0, 0.0, 0.0, 0.0])
-        if not self.gp_ll_gp_mode:
-            self.gp_ll_table.putNumberArray("robot_orientation_set",
-                                            [self.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
+        if self.odo_ll_table.getEntry("tv").getDouble(-1) == 1:
+            odo_ll_botpose = self.odo_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0,
+                                                                                               0.0, 0.0, 0.0, 0.0,
+                                                                                               0.0, 0.0, 0.0, 0.0])
 
-            gp_ll_botpose = self.gp_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0,
-                                                                                             0.0, 0.0, 0.0, 0.0,
-                                                                                             0.0, 0.0, 0.0, 0.0])
-            if odo_ll_botpose[9] < gp_ll_botpose[9] < 10 and odo_ll_botpose[7] >= 1:
-                self.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]),
-                                                   Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
-                                            utils.get_current_time_seconds() - (odo_ll_botpose[6]))
-            elif gp_ll_botpose[9] < odo_ll_botpose[9] < 10 and gp_ll_botpose[7] >= 1:
-                self.add_vision_measurement(Pose2d(Translation2d(gp_ll_botpose[0], gp_ll_botpose[1]),
-                                                   Rotation2d.fromDegrees((gp_ll_botpose[5] + 360) % 360)),
-                                            utils.get_current_time_seconds() - (gp_ll_botpose[6]))
-        else:
-            if odo_ll_botpose[9] < 10 and odo_ll_botpose[7] >= 1:
+            if (odo_ll_botpose[9] < 5 and odo_ll_botpose[7] >= 1 and
+                    16.7 < odo_ll_botpose[0] < 0 and 9 < odo_ll_botpose[1] < 0):
                 # SmartDashboard.putBoolean("Valid AprilTag Detected?", True)
                 self.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]),
                                                    Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
                                             utils.get_current_time_seconds() - (odo_ll_botpose[6] / 1000.0),
                                             (0.2, 0.2, 999999999))
-            # else:
-                # SmartDashboard.putBoolean("Valid AprilTag Detected?", False)
-            if self.gp_ll_table.getEntry("tv").getDouble(-1) == 1:
-                self.tx = self.gp_ll_table.getEntry("tx").getDouble(0)
-                self.add_gp_to_detected_list(self.estimate_gp_location())
-                # SmartDashboard.putString("GP Locations", str(self.gp_locations))
-            else:
-                self.remove_gp_from_detected_list()
-                # SmartDashboard.putString("GP Locations", str(self.gp_locations))
+        # else:
+            # SmartDashboard.putBoolean("Valid AprilTag Detected?", False)
+        if self.gp_ll_table.getEntry("tv").getDouble(-1) == 1:
+            self.tx = self.gp_ll_table.getEntry("tx").getDouble(0)
+            # self.add_gp_to_detected_list(self.estimate_gp_location())
+            # SmartDashboard.putString("GP Locations", str(self.gp_locations))
+        # else:
+        #     self.remove_gp_from_detected_list()
+            # SmartDashboard.putString("GP Locations", str(self.gp_locations))
 
     def estimate_gp_location(self) -> [float, float, float]:
         h = (self.gp_ll_table.getEntry("ta").getDouble(0) * 0.01 * 788.644 + 1.692) * 0.0254  # 1 replaced with empirical ratio
