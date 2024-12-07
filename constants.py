@@ -41,6 +41,6 @@ class AutoConstants:
     speed_at_12_volts: units.meters_per_second = 4.73
 
     # PID Constants for PathPlanner
-    x_pid = [10, 0, 0]
-    y_pid = [10, 0, 0]
+    x_pid = [5, 0, 0]
+    y_pid = [5, 0, 0]
 

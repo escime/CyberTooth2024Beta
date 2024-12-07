@@ -1,28 +1,32 @@
 from commands2 import Command, CommandScheduler, TimedCommandRobot
 from robotcontainer import RobotContainer
-from wpilib import run, RobotBase, SmartDashboard, RobotController
-# from wpinet import PortForwarder
-from phoenix6 import SignalLogger
+from wpilib import run, RobotBase
+from phoenix6 import SignalLogger, utils
+from ntcore import NetworkTableInstance
+from wpimath.geometry import Pose2d, Translation2d, Rotation2d
 
 
 class Robot(TimedCommandRobot):
     """This class allows the programmer to control what runs in each individual robot operation mode."""
     m_autonomous_command: Command  # Definition for autonomous command groups used in autonomousInit
     m_robotcontainer: RobotContainer  # Type-check for robotcontainer class
+    odo_ll_table = NetworkTableInstance.getDefault().getTable("limelight")
+    CommandScheduler.getInstance().setPeriod(0.04)
 
     def robotInit(self) -> None:
         """Initialize the robot through the RobotContainer object and prep the default autonomous command (None)"""
-        # CameraServer.launch()
-        # for i in range(5801, 5810):
-        #     PortForwarder.getInstance().add(i, "limelight.local", i)
-        #     PortForwarder.getInstance().add(i + 10, "limelight-gp.local", i)
         self.m_robotcontainer = RobotContainer()
         self.m_autonomous_command = None
 
     def robotPeriodic(self) -> None:
         """Set the constant robot periodic state (in command based, that's just run the scheduler loop)"""
         CommandScheduler.getInstance().run()
-        # SmartDashboard.putNumber("Robot Voltage", RobotController.getBatteryVoltage())
+        self.odo_ll_table.putNumberArray("robot_orientation_set",
+                                         [self.m_robotcontainer.drivetrain.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
+        odo_ll_botpose = self.odo_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        if (odo_ll_botpose[9] < 5 and odo_ll_botpose[7] >= 1 and
+                0 < odo_ll_botpose[0] < 16.7 and 0 < odo_ll_botpose[1] < 6):
+            self.m_robotcontainer.drivetrain.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]), Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)), utils.get_current_time_seconds() - (odo_ll_botpose[6] / 1000.0), (0.2, 0.2, 999999999))
 
     def disabledInit(self) -> None:
         """Nothing is written here yet. Probably will not modify unless something is required for end-of-match."""

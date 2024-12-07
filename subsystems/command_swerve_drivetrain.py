@@ -14,9 +14,9 @@ from pathplannerlib.controller import PPHolonomicDriveController
 from pathplannerlib.commands import PathfindingCommand
 from constants import AutoConstants
 from ntcore import NetworkTableInstance
-from photonlibpy.simulation import VisionSystemSim, SimCameraProperties, PhotonCameraSim
-from photonlibpy import photonCamera
-from robotpy_apriltag import AprilTagFieldLayout, AprilTagField
+# from photonlibpy.simulation import VisionSystemSim, SimCameraProperties, PhotonCameraSim
+# from photonlibpy import photonCamera
+# from robotpy_apriltag import AprilTagFieldLayout, AprilTagField
 from wpimath.units import degreesToRadians
 
 
@@ -161,6 +161,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.configure_pathplanner()
 
         # Setup for velocity and acceleration calculations.
+        self.lookahead_active = False
         self.loop_time = utils.get_current_time_seconds()
         self.vx_old = 0
         self.vy_old = 0
@@ -185,22 +186,22 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         alert_photonvision_enabled = Alert("PhotonVision Simulation Enabled", Alert.AlertType.kWarning)
 
         # Setup photonvision simulation.
-        if utils.is_simulation():
-            alert_photonvision_enabled.set(True)
-            self.vision_sim = VisionSystemSim("main")
-            self.vision_sim.addAprilTags(AprilTagFieldLayout.loadField(AprilTagField.k2024Crescendo))
-            camera_prop = SimCameraProperties()
-            camera_prop.setCalibrationFromFOV(640, 580, Rotation2d.fromDegrees(100))
-            camera_prop.setCalibError(0.25, 0.08)
-            camera_prop.setFPS(20)
-            camera_prop.setAvgLatency(0.01)
-            camera_prop.setLatencyStdDev(0.01)
-            camera = photonCamera.PhotonCamera("limelight")
-            camera_sim = PhotonCameraSim(camera, camera_prop)
-            robot_to_camera_trl = Translation3d(0, 0.2, 0)
-            robot_to_camera_rot = Rotation3d(degreesToRadians(0), degreesToRadians(-10), degreesToRadians(180))
-            robot_to_camera = Transform3d(robot_to_camera_trl, robot_to_camera_rot)
-            self.vision_sim.addCamera(camera_sim, robot_to_camera)
+        # if utils.is_simulation():
+        #     alert_photonvision_enabled.set(True)
+        #     self.vision_sim = VisionSystemSim("main")
+        #     self.vision_sim.addAprilTags(AprilTagFieldLayout.loadField(AprilTagField.k2024Crescendo))
+        #     camera_prop = SimCameraProperties()
+        #     camera_prop.setCalibrationFromFOV(640, 580, Rotation2d.fromDegrees(100))
+        #     camera_prop.setCalibError(0.25, 0.08)
+        #     camera_prop.setFPS(20)
+        #     camera_prop.setAvgLatency(0.01)
+        #     camera_prop.setLatencyStdDev(0.01)
+        #     camera = photonCamera.PhotonCamera("limelight")
+        #     camera_sim = PhotonCameraSim(camera, camera_prop)
+        #     robot_to_camera_trl = Translation3d(0, 0.2, 0)
+        #     robot_to_camera_rot = Rotation3d(degreesToRadians(0), degreesToRadians(-10), degreesToRadians(180))
+        #     robot_to_camera = Transform3d(robot_to_camera_trl, robot_to_camera_rot)
+        #     self.vision_sim.addCamera(camera_sim, robot_to_camera)
 
         self._translation_characterization = swerve.requests.SysIdSwerveTranslation()
         self._steer_characterization = swerve.requests.SysIdSwerveSteerGains()
@@ -297,13 +298,17 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                 self._has_applied_operator_perspective = True
 
         # Configure limelight settings and data transfer.
-        self.limelight_periodic()
+        # self.limelight_periodic()
 
         # Update robot velocity and acceleration.
-        self.vel_acc_periodic()
+        if self.lookahead_active:
+            self.vel_acc_periodic()
 
         # Update photonvision simulation.
-        self.photonvision_sim_periodic()
+        # self.photonvision_sim_periodic()
+
+    def set_lookahead(self, on: bool) -> None:
+        self.lookahead_active = on
 
     def photonvision_sim_periodic(self) -> None:
         if utils.is_simulation():
@@ -349,11 +354,11 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.omega_robot_old = self.omega_robot_new
 
         self.loop_time = utils.get_current_time_seconds()
-        SmartDashboard.putNumber("Robot Linear Speed", math.sqrt((self.vx_new * self.vx_new) + (self.vy_new * self.vy_new)))
-        SmartDashboard.putBoolean("Robot Slipping X", self.get_slip_detected()[0])
-        SmartDashboard.putBoolean("Robot Slipping Y", self.get_slip_detected()[1])
-        SmartDashboard.putNumber("Robot Heading", self.get_pose().rotation().degrees())
-        self.get_slip_detected()
+        # SmartDashboard.putNumber("Robot Linear Speed", math.sqrt((self.vx_new * self.vx_new) + (self.vy_new * self.vy_new)))
+        # SmartDashboard.putBoolean("Robot Slipping X", self.get_slip_detected()[0])
+        # SmartDashboard.putBoolean("Robot Slipping Y", self.get_slip_detected()[1])
+        # SmartDashboard.putNumber("Robot Heading", self.get_pose().rotation().degrees())
+        # self.get_slip_detected()
 
     def limelight_periodic(self) -> None:
         """Fuses limelight data with the pose estimator."""
@@ -366,7 +371,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                                                                                                0.0, 0.0, 0.0, 0.0])
 
             if (odo_ll_botpose[9] < 5 and odo_ll_botpose[7] >= 1 and
-                    16.7 < odo_ll_botpose[0] < 0 and 9 < odo_ll_botpose[1] < 0):
+                    0 < odo_ll_botpose[0] < 16.7 and 0 < odo_ll_botpose[1] < 6):
                 # SmartDashboard.putBoolean("Valid AprilTag Detected?", True)
                 self.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]),
                                                    Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
@@ -382,39 +387,39 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         #     self.remove_gp_from_detected_list()
             # SmartDashboard.putString("GP Locations", str(self.gp_locations))
 
-    def estimate_gp_location(self) -> [float, float, float]:
-        h = (self.gp_ll_table.getEntry("ta").getDouble(0) * 0.01 * 788.644 + 1.692) * 0.0254  # 1 replaced with empirical ratio
-        y = h * math.sin(self.get_pose().rotation().radians())
-        x = h * math.cos(self.get_pose().rotation().radians())
-
-        return [self.get_pose().x + x, self.get_pose().y + y, self.get_pose().rotation().degrees(),
-                utils.get_current_time_seconds()]
-
-    def add_gp_to_detected_list(self, gp: [float, float, float, float]) -> None:
-        if self.gp_locations:
-            for x in self.gp_locations:
-                if gp[0] - 0.5 < x[0] < gp[0] + 0.5 and gp[1] - 0.5 < x[1] < gp[1] + 0.5:
-                    x[0] = gp[0]
-                    x[1] = gp[1]
-                    x[2] = gp[2]
-                    x[3] = gp[3]
-                else:
-                    self.gp_locations.append([gp[0], gp[1], gp[2], gp[3]])
-        else:
-            self.gp_locations.append([gp[0], gp[1], gp[2], gp[3]])
-        # self.display_gps_as_poses()
-
-    def remove_gp_from_detected_list(self):
-        for x in self.gp_locations:
-            if (self.get_pose().rotation().degrees() - 2 < x[2] < self.get_pose().rotation().degrees() + 2 or
-                    x[3] < utils.get_current_time_seconds() - 5):
-                self.gp_locations.remove(x)
-                self.display_gps_as_poses()
-
-    def display_gps_as_poses(self):
-        for i in range(0, len(self.gp_locations)):
-            self.gp_field.getObject("gp" + str(i)).setPose(Pose2d(self.gp_locations[i][0], self.gp_locations[i][1], 0))
-        SmartDashboard.putData(self.gp_field)
+    # def estimate_gp_location(self) -> [float, float, float]:
+    #     h = (self.gp_ll_table.getEntry("ta").getDouble(0) * 0.01 * 788.644 + 1.692) * 0.0254  # 1 replaced with empirical ratio
+    #     y = h * math.sin(self.get_pose().rotation().radians())
+    #     x = h * math.cos(self.get_pose().rotation().radians())
+    # 
+    #     return [self.get_pose().x + x, self.get_pose().y + y, self.get_pose().rotation().degrees(),
+    #             utils.get_current_time_seconds()]
+    #
+    # def add_gp_to_detected_list(self, gp: [float, float, float, float]) -> None:
+    #     if self.gp_locations:
+    #         for x in self.gp_locations:
+    #             if gp[0] - 0.5 < x[0] < gp[0] + 0.5 and gp[1] - 0.5 < x[1] < gp[1] + 0.5:
+    #                 x[0] = gp[0]
+    #                 x[1] = gp[1]
+    #                 x[2] = gp[2]
+    #                 x[3] = gp[3]
+    #             else:
+    #                 self.gp_locations.append([gp[0], gp[1], gp[2], gp[3]])
+    #     else:
+    #         self.gp_locations.append([gp[0], gp[1], gp[2], gp[3]])
+    #     # self.display_gps_as_poses()
+    #
+    # def remove_gp_from_detected_list(self):
+    #     for x in self.gp_locations:
+    #         if (self.get_pose().rotation().degrees() - 2 < x[2] < self.get_pose().rotation().degrees() + 2 or
+    #                 x[3] < utils.get_current_time_seconds() - 5):
+    #             self.gp_locations.remove(x)
+    #             self.display_gps_as_poses()
+    #
+    # def display_gps_as_poses(self):
+    #     for i in range(0, len(self.gp_locations)):
+    #         self.gp_field.getObject("gp" + str(i)).setPose(Pose2d(self.gp_locations[i][0], self.gp_locations[i][1], 0))
+    #     SmartDashboard.putData(self.gp_field)
 
     def get_field_relative_velocity(self) -> [float, float, float]:
         """Returns the instantaneous velocity of the robot."""
@@ -594,3 +599,11 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
             y_slip = True
 
         return [x_slip, y_slip]
+
+    def reset_odometry(self):
+        if DriverStation.getAlliance() == DriverStation.Alliance.kRed:
+            self.reset_pose(Pose2d(15.19, 5.55, Rotation2d.fromDegrees(180)))
+            self.set_operator_perspective_forward(Rotation2d.fromDegrees(180))
+        else:
+            self.reset_pose(Pose2d(1.5, 5.55, Rotation2d.fromDegrees(0)))
+            self.set_operator_perspective_forward(Rotation2d.fromDegrees(0))

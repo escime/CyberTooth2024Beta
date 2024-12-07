@@ -1,4 +1,4 @@
-from commands2 import Command
+from commands2 import Command, button
 
 from subsystems.command_swerve_drivetrain import CommandSwerveDrivetrain
 from subsystems.utilsubsystem import UtilSubsystem
@@ -10,12 +10,12 @@ from wpimath.units import degreesToRadians, radiansToDegrees, metersToInches
 from math import sqrt, pow, cos, sin, atan2
 from wpilib import DriverStation, SmartDashboard
 
-from helpers.custom_hid import CustomHID
+# from helpers.custom_hid import CustomHID
 
 
 class AutoAlignmentAutoSelect(Command):
     def __init__(self, drive: CommandSwerveDrivetrain, util: UtilSubsystem, arm: ArmSubsystem, flipped: bool,
-                 joystick: CustomHID):
+                 joystick: button.CommandXboxController):
         super().__init__()
         self.drive = drive
         self.joystick = joystick
@@ -40,7 +40,7 @@ class AutoAlignmentAutoSelect(Command):
         self.arm.set_state(self.util.scoring_setpoints[self.util.scoring_setpoint])
 
     def execute(self):
-        x_move = self.joystick.get_axis("LY", 0.1) * -1
+        x_move = self.joystick.getLeftY() * -1
 
         current_pose = self.drive.get_pose()
         a = self.target[0] - current_pose.x

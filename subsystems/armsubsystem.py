@@ -152,8 +152,8 @@ class ArmSubsystem(Subsystem):
             self.arm_m2d_elbow.setAngle(degrees(self.arm_sim.getAngle()))
             SmartDashboard.putNumberArray("Arm Location", [inchesToMeters(5.5), inchesToMeters(0), inchesToMeters(11.5),
                                                            0, 0, self.arm_sim.getAngle()])
-        else:
-            self.arm_m2d_elbow.setAngle(self.elbow.get_position().value_as_double)
+        # else:
+        #     self.arm_m2d_elbow.setAngle(self.elbow.get_position().value_as_double)
 
         if self.state == "shoot" or self.state == "reverse_shoot":
             if self.get_at_target():
@@ -163,5 +163,5 @@ class ArmSubsystem(Subsystem):
         else:
             self.intake.setVoltage(-0.5)
 
-        SmartDashboard.putData("Arm M2D", self.arm_m2d)
-        SmartDashboard.putNumber("Elbow Position", self.elbow.get_position().value_as_double)
+        # SmartDashboard.putData("Arm M2D", self.arm_m2d)
+        # SmartDashboard.putNumber("Elbow Position", self.elbow.get_position().value_as_double)

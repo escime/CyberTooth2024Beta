@@ -8,8 +8,7 @@ from subsystems.ledsubsystem import LEDs
 from subsystems.armsubsystem import ArmSubsystem
 from subsystems.utilsubsystem import UtilSubsystem
 from wpilib import SmartDashboard, SendableChooser, DriverStation, DataLogManager, Timer, Alert
-from helpers.custom_hid import CustomHID
-from helpers.data_wrap import DataWrap
+# from helpers.custom_hid import CustomHID
 from pathplannerlib.auto import NamedCommands, PathPlannerAuto
 from wpinet import PortForwarder
 
@@ -26,10 +25,7 @@ from commands.baseline import Baseline
 from commands.check_drivetrain import CheckDrivetrain
 from commands.alignment_leds import AlignmentLEDs
 from commands.drive_to_gamepiece import DriveToGamePiece
-# from commands.drive_aligned import DriveAligned
 from commands.auto_alignment_leds import AutoAlignmentLEDs
-# from commands.grid_aligned import GridAligned
-# from commands.auto_alignment import AutoAlignment
 from commands.profiled_target import ProfiledTarget
 from commands.auto_alignment_auto_select import AutoAlignmentAutoSelect
 
@@ -50,28 +46,36 @@ class RobotContainer:
         # Configure button to enable robot logging.
         self.logging_button = SmartDashboard.putBoolean("Logging Enabled?", False)
 
+        # Disable automatic ctre logging
+        SignalLogger.enable_auto_logging(False)
+
         # Configure system logging. ------------------------------------------------------------------------------------
         self.alert_logging_enabled = Alert("Robot Logging is Enabled", Alert.AlertType.kWarning)
+        self.alert_limelight = Alert("Limelight ports forwarded", Alert.AlertType.kWarning)
         if wpilib.RobotBase.isReal():
             if SmartDashboard.getBoolean("Logging Enabled?", False) is True:
                 DataLogManager.start()
                 DriverStation.startDataLog(DataLogManager.getLog(), True)
+                SignalLogger.start()
                 self.alert_logging_enabled.set(True)
-            port_forwarder = PortForwarder()
+            else:
+                SignalLogger.stop()
             for port in range(5800, 5810):
-                port_forwarder.add(port, "limelight.local", port)
-                port_forwarder.add(port+10, "limelight-gp.local", port)
-                Alert("Limelight ports forwarded.", Alert.AlertType.kWarning).set(True)
+                PortForwarder.getInstance().add(port, "10.39.40.11", port)
+            for port in range(5800, 5810):
+                PortForwarder.getInstance().add(port+10, "10.39.40.12", port)
+            self.alert_limelight.set(True)
 
         # Startup subsystems. ------------------------------------------------------------------------------------------
-        self.data_wrap = DataWrap()
         self.leds = LEDs(self.timer)
         self.arm = ArmSubsystem()
         self.util = UtilSubsystem()
 
         # Setup driver & operator controllers. -------------------------------------------------------------------------
-        self.driver_controller = CustomHID(OIConstants.kDriverControllerPort, "xbox")
-        self.operator_controller = CustomHID(OIConstants.kOperatorControllerPort, "xbox")
+        # self.driver_controller = CustomHID(OIConstants.kDriverControllerPort, "xbox")
+        # self.operator_controller = CustomHID(OIConstants.kOperatorControllerPort, "xbox")
+        self.driver_controller = button.CommandXboxController(OIConstants.kDriverControllerPort)
+        self.operator_controller = button.CommandXboxController(OIConstants.kOperatorControllerPort)
         DriverStation.silenceJoystickConnectionWarning(True)
         self.test_bindings = False
 
@@ -123,8 +127,9 @@ class RobotContainer:
         SmartDashboard.putNumber("Misalignment Angle", 0)
 
         # Setup for all event-trigger commands. ------------------------------------------------------------------------
-        self.configureTriggersDefault()
-        self.configureTestBindings()
+        # self.configureTriggersDefault()
+        # self.configureTestBindings()
+        self.configureTriggersRewrite()
 
         # Setup autonomous selector on the dashboard. ------------------------------------------------------------------
         self.m_chooser = SendableChooser()
@@ -133,6 +138,86 @@ class RobotContainer:
         for x in self.auto_names:
             self.m_chooser.addOption(x, x)
         SmartDashboard.putData("Auto Select", self.m_chooser)
+
+    def configureTriggersRewrite(self) -> None:
+        self.drivetrain.setDefaultCommand(  # Drivetrain will execute this command periodically
+            self.drivetrain.apply_request(
+                lambda: (
+                    self._drive.with_velocity_x(
+                        -self.driver_controller.getLeftY() * self._max_speed)
+                    .with_velocity_y(-self.driver_controller.getLeftX() * self._max_speed)
+                    .with_rotational_rate(-self.driver_controller.getRightX() * self._max_angular_rate)
+                )
+            )
+        )
+
+        # Reset pose.
+        self.driver_controller.y().and_(lambda: not self.test_bindings).onTrue(
+            runOnce(lambda: self.drivetrain.reset_odometry(), self.drivetrain))
+
+        # Auto Alignment
+        self.driver_controller.b().and_(lambda: not self.test_bindings).whileTrue(
+            ParallelCommandGroup(
+                AlignmentLEDs(self.leds, self.drivetrain),
+                ProfiledTarget(self.drivetrain, self.arm, [16.5, 5.53])
+            ))
+
+        # Arm manual controls.
+        self.driver_controller.povUp().and_(lambda: not self.test_bindings).whileTrue(
+            run(lambda: self.arm.set_voltage_direct(1), self.arm)).onFalse(
+            run(lambda: self.arm.set_voltage_direct(0), self.arm))
+        self.driver_controller.povDown().and_(lambda: not self.test_bindings).whileTrue(
+            run(lambda: self.arm.set_voltage_direct(-1), self.arm)).onFalse(
+            run(lambda: self.arm.set_voltage_direct(0), self.arm))
+
+        # Auto selecting auto alignment.
+        self.driver_controller.rightTrigger().and_(lambda: not self.test_bindings).whileTrue(
+            AutoAlignmentAutoSelect(self.drivetrain, self.util, self.arm, True, self.driver_controller))
+
+        # Shoot over the non-intake side
+        self.driver_controller.rightBumper().and_(lambda: not self.test_bindings).onTrue(
+            runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm)
+        ).onFalse(
+            runOnce(lambda: self.arm.set_state("stow"), self.arm)
+        )
+
+        # Intake
+        self.driver_controller.leftTrigger().and_(lambda: not self.test_bindings).onTrue(
+            runOnce(lambda: self.arm.set_state("intake"), self.arm)
+        ).onFalse(
+            runOnce(lambda: self.arm.set_state("stow"), self.arm)
+        )
+
+        self.driver_controller.povLeft().and_(lambda: not self.test_bindings).onTrue(
+            runOnce(lambda: self.util.cycle_scoring_setpoints(1), self.util).ignoringDisable(True)
+        )
+        self.driver_controller.povRight().and_(lambda: not self.test_bindings).onTrue(
+            runOnce(lambda: self.util.cycle_scoring_setpoints(-1), self.util).ignoringDisable(True)
+        )
+
+        # Cube acquired light
+        button.Trigger(lambda: self.arm.get_sensor_on() and DriverStation.isTeleop()).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
+                runOnce(lambda: self.leds.set_flash_color_color([0, 255, 0]), self.leds),
+                runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
+                WaitCommand(2),
+                runOnce(lambda: self.leds.set_state("gp_held"), self.leds)
+            ).ignoringDisable(True)
+        ).onFalse(
+            SequentialCommandGroup(
+                runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
+                runOnce(lambda: self.leds.set_flash_color_color([255, 0, 0]), self.leds),
+                runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
+                WaitCommand(0.5),
+                runOnce(lambda: self.leds.set_state("default"), self.leds)
+            ).ignoringDisable(True)
+        )
+
+        # Configuration for telemetry.
+        self.drivetrain.register_telemetry(
+            lambda state: self._logger.telemeterize(state)
+        )
 
     def configureTriggersDefault(self) -> None:
         """Used to set up any commands that trigger when a measured event occurs."""
@@ -175,17 +260,17 @@ class RobotContainer:
         #     self.drivetrain.apply_request(lambda: self._brake))
 
         # Auto-alignment LEDs testing.
-        button.Trigger(lambda: self.driver_controller.get_button("A") and not self.test_bindings).toggleOnTrue(
-            ParallelCommandGroup(
-                AlignmentLEDs(self.leds, self.drivetrain),
-                self.drivetrain.apply_request(
-                    lambda: (
-                        self._hold_heading.with_velocity_x(
-                            -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
-                        .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
-                        .with_target_direction(Rotation2d.fromDegrees(180 +
-                                                                      self.drivetrain.get_auto_lookahead_heading(
-                                                                          [16.5, 5.53], 0.3)))))))
+        # button.Trigger(lambda: self.driver_controller.get_button("A") and not self.test_bindings).toggleOnTrue(
+        #     ParallelCommandGroup(
+        #         AlignmentLEDs(self.leds, self.drivetrain),
+        #         self.drivetrain.apply_request(
+        #             lambda: (
+        #                 self._hold_heading.with_velocity_x(
+        #                     -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
+        #                 .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
+        #                 .with_target_direction(Rotation2d.fromDegrees(180 +
+        #                                                               self.drivetrain.get_auto_lookahead_heading(
+        #                                                                   [16.5, 5.53], 0.3)))))))
 
         # VIEW toggles on "snap heading" mode, where the driver can snap the right joystick in the direction they want
         # the robot to face.
@@ -209,62 +294,62 @@ class RobotContainer:
             run(lambda: self.arm.set_voltage_direct(0), self.arm))
 
         # Cube acquired light
-        button.Trigger(lambda: self.arm.get_sensor_on() and DriverStation.isTeleop()).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
-                runOnce(lambda: self.leds.set_flash_color_color([0, 255, 0]), self.leds),
-                runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
-                WaitCommand(2),
-                runOnce(lambda: self.leds.set_state("gp_held"), self.leds)
-            ).ignoringDisable(True)
-        ).onFalse(
-            SequentialCommandGroup(
-                runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
-                runOnce(lambda: self.leds.set_flash_color_color([255, 0, 0]), self.leds),
-                runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
-                WaitCommand(0.5),
-                runOnce(lambda: self.leds.set_state("default"), self.leds)
-            ).ignoringDisable(True)
-        )
+        # button.Trigger(lambda: self.arm.get_sensor_on() and DriverStation.isTeleop()).onTrue(
+        #     SequentialCommandGroup(
+        #         runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
+        #         runOnce(lambda: self.leds.set_flash_color_color([0, 255, 0]), self.leds),
+        #         runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
+        #         WaitCommand(2),
+        #         runOnce(lambda: self.leds.set_state("gp_held"), self.leds)
+        #     ).ignoringDisable(True)
+        # ).onFalse(
+        #     SequentialCommandGroup(
+        #         runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
+        #         runOnce(lambda: self.leds.set_flash_color_color([255, 0, 0]), self.leds),
+        #         runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
+        #         WaitCommand(0.5),
+        #         runOnce(lambda: self.leds.set_state("default"), self.leds)
+        #     ).ignoringDisable(True)
+        # )
 
         # Drive to game piece
-        button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).whileTrue(
-            DriveToGamePiece(self.drivetrain, self.arm, self.driver_controller))
+        # button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).whileTrue(
+        #     DriveToGamePiece(self.drivetrain, self.arm, self.driver_controller))
 
         # Vibrate the controller when a game piece is in view
-        button.Trigger(lambda: self.drivetrain.get_gp_in_view()).onTrue(
-            runOnce(lambda: self.driver_controller.set_rumble(1)).ignoringDisable(False)).onFalse(
-            runOnce(lambda: self.driver_controller.set_rumble(0)).ignoringDisable(True))
+        # button.Trigger(lambda: self.drivetrain.get_gp_in_view()).onTrue(
+        #     runOnce(lambda: self.driver_controller.set_rumble(1)).ignoringDisable(False)).onFalse(
+        #     runOnce(lambda: self.driver_controller.set_rumble(0)).ignoringDisable(True))
 
         # Match time notifications
-        button.Trigger(lambda: DriverStation.getMatchTime() <= 20).onTrue(
-            runOnce(lambda: self.leds.set_notifier((0, 255, 0)), self.leds)
-        )
-        button.Trigger(lambda: DriverStation.getMatchTime() <= 10).onTrue(
-            runOnce(lambda: self.leds.set_notifier((255, 255, 0)), self.leds)
-        )
-        button.Trigger(lambda: DriverStation.getMatchTime() <= 5).onTrue(
-            runOnce(lambda: self.leds.set_notifier((255, 0, 0)), self.leds)
-        )
-        button.Trigger(lambda: DriverStation.getMatchTime() <= 0.01).onTrue(
-            runOnce(lambda: self.leds.set_notifier([-1, -1, -1]), self.leds).ignoringDisable(True)
-        )
+        # button.Trigger(lambda: DriverStation.getMatchTime() <= 20).onTrue(
+        #     runOnce(lambda: self.leds.set_notifier((0, 255, 0)), self.leds)
+        # )
+        # button.Trigger(lambda: DriverStation.getMatchTime() <= 10).onTrue(
+        #     runOnce(lambda: self.leds.set_notifier((255, 255, 0)), self.leds)
+        # )
+        # button.Trigger(lambda: DriverStation.getMatchTime() <= 5).onTrue(
+        #     runOnce(lambda: self.leds.set_notifier((255, 0, 0)), self.leds)
+        # )
+        # button.Trigger(lambda: DriverStation.getMatchTime() <= 0.01).onTrue(
+        #     runOnce(lambda: self.leds.set_notifier([-1, -1, -1]), self.leds).ignoringDisable(True)
+        # )
 
         # Reset heading and position when at the subwoofer by pressing "Y".
-        button.Trigger(lambda: self.driver_controller.get_button("Y") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.drivetrain.reset_pose(Pose2d(15.19, 5.55, Rotation2d.fromDegrees(180))),
-                        self.drivetrain),
-                runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(180)))
-            ))
-        button.Trigger(lambda: self.driver_controller.get_button("Y") and not self.test_bindings and
-                       DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.drivetrain.reset_pose(Pose2d(1.5, 5.55, Rotation2d.fromDegrees(0))),
-                        self.drivetrain),
-                runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(0)))
-            ))
+        # button.Trigger(lambda: self.driver_controller.get_button("Y") and not self.test_bindings and
+        #                DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
+        #     SequentialCommandGroup(
+        #         runOnce(lambda: self.drivetrain.reset_pose(Pose2d(15.19, 5.55, Rotation2d.fromDegrees(180))),
+        #                 self.drivetrain),
+        #         runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(180)))
+        #     ))
+        # button.Trigger(lambda: self.driver_controller.get_button("Y") and not self.test_bindings and
+        #                DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
+        #     SequentialCommandGroup(
+        #         runOnce(lambda: self.drivetrain.reset_pose(Pose2d(1.5, 5.55, Rotation2d.fromDegrees(0))),
+        #                 self.drivetrain),
+        #         runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(0)))
+        #     ))
 
         # Scoring grid alignment
         # (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
@@ -276,10 +361,6 @@ class RobotContainer:
          .whileTrue(
             AutoAlignmentAutoSelect(self.drivetrain, self.util, self.arm, True, self.driver_controller)
         ))
-
-        # (button.Trigger(lambda: self.driver_controller.get_button("B") and not self.test_bindings).whileTrue(
-        #     AutoAlignmentAutoSelect(self.drivetrain, self.util, self.arm, True, self.driver_controller)
-        # ))
 
         # Shoot over the non-intake side
         button.Trigger(lambda: self.driver_controller.get_button("LB") and not self.test_bindings).onTrue(
@@ -296,18 +377,12 @@ class RobotContainer:
         ))
 
         # Activate autonomous misalignment lights.
-        button.Trigger(lambda: SmartDashboard.getBoolean("Misalignment Indicator Active?", False)).whileTrue(
-            AutoAlignmentLEDs(self.drivetrain, self.leds, self.m_auto_start_location)
-            .ignoringDisable(True)
-        )
+        # button.Trigger(lambda: SmartDashboard.getBoolean("Misalignment Indicator Active?", False)).whileTrue(
+        #     AutoAlignmentLEDs(self.drivetrain, self.leds, self.m_auto_start_location)
+        #     .ignoringDisable(True)
+        # )
 
         # Grid Scoring Controls
-        # button.Trigger(lambda: self.driver_controller.get_d_pad_pull("E")).onTrue(
-        #     runOnce(lambda: self.util.cycle_scoring_locations(1), self.util).ignoringDisable(True)
-        # )
-        # button.Trigger(lambda: self.driver_controller.get_d_pad_pull("W")).onTrue(
-        #     runOnce(lambda: self.util.cycle_scoring_locations(-1), self.util).ignoringDisable(True)
-        # )
         button.Trigger(lambda: self.operator_controller.get_d_pad_pull("N")).onTrue(
             runOnce(lambda: self.util.cycle_scoring_setpoints(1), self.util).ignoringDisable(True)
         )
@@ -322,18 +397,20 @@ class RobotContainer:
             runOnce(lambda: self.arm.set_servo(0), self.arm)
         )
 
-        button.Trigger(lambda: SmartDashboard.getBoolean("Logging Enabled?", False)).onTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: DataLogManager.start()),
-                runOnce(lambda: DriverStation.startDataLog(DataLogManager.getLog(), True)),
-                runOnce(lambda: self.alert_logging_enabled.set(True))
-            )
-        ).onFalse(
-            SequentialCommandGroup(
-                runOnce(lambda: DataLogManager.stop()),
-                runOnce(lambda: self.alert_logging_enabled.set(False))
-            )
-        )
+        # button.Trigger(lambda: SmartDashboard.getBoolean("Logging Enabled?", False)).onTrue(
+        #     SequentialCommandGroup(
+        #         runOnce(lambda: DataLogManager.start()),
+        #         runOnce(lambda: DriverStation.startDataLog(DataLogManager.getLog(), True)),
+        #         runOnce(lambda: SignalLogger.start()),
+        #         runOnce(lambda: self.alert_logging_enabled.set(True))
+        #     )
+        # ).onFalse(
+        #     SequentialCommandGroup(
+        #         runOnce(lambda: DataLogManager.stop()),
+        #         runOnce(lambda: SignalLogger.stop()),
+        #         runOnce(lambda: self.alert_logging_enabled.set(False))
+        #     )
+        # )
 
         # Configuration for telemetry.
         self.drivetrain.register_telemetry(
@@ -373,10 +450,6 @@ class RobotContainer:
                     Rotation2d(-self.driver_controller.get_axis("LY", 0.05),
                                -self.driver_controller.get_axis("LX", 0.05)))
             ))
-
-        button.Trigger(lambda: self.driver_controller.get_button("VIEW") and self.test_bindings).onTrue(
-            runOnce(lambda: self.leds.set_state("time_variable_default"), self.leds)
-        )
 
     def configureSYSID(self) -> None:
         # Run Quasistatic Translational test.
@@ -475,11 +548,18 @@ class RobotContainer:
         NamedCommands.registerCommand("baseline", Baseline(self.drivetrain, self.timer))
         NamedCommands.registerCommand("check_drivetrain", CheckDrivetrain(self.drivetrain, self.timer))
         NamedCommands.registerCommand("override_heading_goal",
-                                      runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override("goal")))
+                                      SequentialCommandGroup(
+                                          runOnce(lambda: self.drivetrain.set_lookahead(True)),
+                                          runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override("goal"))
+                                        )
+                                      )
         NamedCommands.registerCommand("override_heading_gp",
                                       runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override("gp")))
         NamedCommands.registerCommand("disable_override_heading",
-                                      runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override("none")))
+                                      SequentialCommandGroup(
+                                          runOnce(lambda: self.drivetrain.set_lookahead(False)),
+                                          runOnce(lambda: self.drivetrain.set_pathplanner_rotation_override("none"))
+                                      ))
         NamedCommands.registerCommand("intake", runOnce(lambda: self.arm.set_state("intake"),
                                                         self.arm))
         NamedCommands.registerCommand("stow", runOnce(lambda: self.arm.set_state("stow"), self.arm))

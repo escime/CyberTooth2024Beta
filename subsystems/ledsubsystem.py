@@ -28,6 +28,10 @@ class LEDs(Subsystem):
         for i in range(0, LEDConstants.strip_length - 21):
             self.default_pattern.append(AddressableLED.LEDData(0, 0, 0))
 
+        # Prepare no-animation light.
+        self.no_pattern = [AddressableLED.LEDData(149, 50, 168)] * LEDConstants.strip_length
+        self.gp_held_simple = [AddressableLED.LEDData(0, 255, 0)] * LEDConstants.strip_length
+
         # Prepare gp_held pattern
         self.gp_held_pattern = [AddressableLED.LEDData(149, 50, 168)] * 2
         for i in range(0, 2):
@@ -113,61 +117,77 @@ class LEDs(Subsystem):
 
         self.display_buffer = [0] * LEDConstants.strip_length
 
+        self.re_enter_default = True
+        self.re_enter_gp_held = True
+
         self.last_time = self.timer.get()
 
     def set_state(self, target_state: str) -> None:
         """Set the current state of the subsystem."""
         self.state = target_state
+        if target_state == "default":
+            self.re_enter_default = True
         if target_state == "timer_lights":
             self.buffer = [AddressableLED.LEDData(255, 0, 0)] * LEDConstants.strip_length
-        if target_state == "time_variable_default":
-            self.counter = 1
-            self.time_default_pattern = [AddressableLED.LEDData(149, 50, 168)] * 2
-            for i in range(0, 2):
-                self.time_default_pattern.append(
-                    AddressableLED.LEDData(int(149 * 0.75), int(50 * 0.75), int(168 * 0.75)))
-            for i in range(0, 3):
-                self.time_default_pattern.append(AddressableLED.LEDData(int(149 * 0.5), int(50 * 0.5), int(168 * 0.5)))
-            for i in range(0, 7):
-                self.time_default_pattern.append(
-                    AddressableLED.LEDData(int(149 * 0.25), int(50 * 0.25), int(168 * 0.25)))
-            for i in range(0, 7):
-                self.time_default_pattern.append(AddressableLED.LEDData(int(149 * 0.1), int(50 * 0.1), int(168 * 0.1)))
-            for i in range(0, LEDConstants.strip_length - 21):
-                self.time_default_pattern.append(AddressableLED.LEDData(0, 0, 0))
+        # if target_state == "time_variable_default":
+        #     self.counter = 1
+        #     self.time_default_pattern = [AddressableLED.LEDData(149, 50, 168)] * 2
+        #     for i in range(0, 2):
+        #         self.time_default_pattern.append(
+        #             AddressableLED.LEDData(int(149 * 0.75), int(50 * 0.75), int(168 * 0.75)))
+        #     for i in range(0, 3):
+        #         self.time_default_pattern.append(AddressableLED.LEDData(int(149 * 0.5), int(50 * 0.5), int(168 * 0.5)))
+        #     for i in range(0, 7):
+        #         self.time_default_pattern.append(
+        #             AddressableLED.LEDData(int(149 * 0.25), int(50 * 0.25), int(168 * 0.25)))
+        #     for i in range(0, 7):
+        #         self.time_default_pattern.append(AddressableLED.LEDData(int(149 * 0.1), int(50 * 0.1), int(168 * 0.1)))
+        #     for i in range(0, LEDConstants.strip_length - 21):
+        #         self.time_default_pattern.append(AddressableLED.LEDData(0, 0, 0))
 
     def periodic(self) -> None:
-        if self.state == "default":
-            self.default()
-        elif self.state == "flash_color":
-            self.flash_color()
-        elif self.state == "shoot":
-            self.shoot()
-        elif self.state == "gp_held":
-            self.gp_held()
-        elif self.state == "rainbow":
-            self.rainbow()
-        elif self.state == "timer_lights":
-            self.timer_lights()
-        elif self.state == "align":
-            self.align()
-        elif self.state == "flames":
-            self.flames()
-        elif self.state == "time_variable_default":
-            self.time_variable_default()
+        if self.state != "default" and self.state != "gp_held":
+            self.re_enter_gp_held = True
+            self.re_enter_default = True
+            if self.state == "flash_color":
+                self.flash_color()
+            elif self.state == "shoot":
+                self.shoot()
+            elif self.state == "gp_held":
+                self.gp_held()
+            elif self.state == "rainbow":
+                self.rainbow()
+            elif self.state == "timer_lights":
+                self.timer_lights()
+            elif self.state == "align":
+                self.align()
+            elif self.state == "flames":
+                self.flames()
+            # elif self.state == "time_variable_default":
+            #     self.time_variable_default()
+
+            if self.notifier_on:
+                self.buffer = self.buffer[:-5]
+                for i in range(0, 5):
+                    self.buffer.append(AddressableLED.LEDData(self.priority_notifier[0], self.priority_notifier[1],
+                                                              self.priority_notifier[2]))
+
+            self.chain.setData(self.buffer)
+            # for i in range(0, LEDConstants.strip_length):
+            #     self.display_buffer[i] = Color(self.buffer[i].r, self.buffer[i].g, self.buffer[i].b).hexString()
+            # SmartDashboard.putStringArray("LED Display", self.display_buffer)
         else:
-            self.default()
-
-        if self.notifier_on:
-            self.buffer = self.buffer[:-5]
-            for i in range(0, 5):
-                self.buffer.append(AddressableLED.LEDData(self.priority_notifier[0], self.priority_notifier[1],
-                                                          self.priority_notifier[2]))
-
-        self.chain.setData(self.buffer)
-        for i in range(0, LEDConstants.strip_length):
-            self.display_buffer[i] = Color(self.buffer[i].r, self.buffer[i].g, self.buffer[i].b).hexString()
-        SmartDashboard.putStringArray("LED Display", self.display_buffer)
+            # self.default()
+            if self.state == "default":
+                if self.re_enter_default:
+                    self.buffer = self.no_pattern
+                    self.re_enter_default = False
+                    self.chain.setData(self.buffer)
+            if self.state == "gp_held":
+                if self.re_enter_gp_held:
+                    self.buffer = self.gp_held_simple
+                    self.re_enter_gp_held = False
+                    self.chain.setData(self.buffer)
 
     def default(self) -> None:
         """Logic for running default animation."""
