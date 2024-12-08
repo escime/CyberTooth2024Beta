@@ -182,6 +182,19 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         self.ay_robot = 0
         self.alpha_robot = 0
 
+        # Configure closed loop turning controller.
+        self.clt_request = (
+            swerve.requests.FieldCentricFacingAngle()
+            # .with_deadband(self._max_speed * 0.1)
+            .with_drive_request_type(swerve.SwerveModule.DriveRequestType.VELOCITY)
+            .with_desaturate_wheel_speeds(True)
+        )
+        self.clt_request.heading_controller.setPID(5, 0, 0)
+        self.clt_request.heading_controller.enableContinuousInput(0, -2 * math.pi)
+        self.clt_request.heading_controller.setTolerance(0.05)
+        self.re_entered_clt = True
+        self.target_direction = Rotation2d(0)
+
         # Configure persistent alerts.
         alert_photonvision_enabled = Alert("PhotonVision Simulation Enabled", Alert.AlertType.kWarning)
 
@@ -359,67 +372,6 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         # SmartDashboard.putBoolean("Robot Slipping Y", self.get_slip_detected()[1])
         # SmartDashboard.putNumber("Robot Heading", self.get_pose().rotation().degrees())
         # self.get_slip_detected()
-
-    def limelight_periodic(self) -> None:
-        """Fuses limelight data with the pose estimator."""
-        self.odo_ll_table.putNumberArray("robot_orientation_set",
-                                         [self.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
-
-        if self.odo_ll_table.getEntry("tv").getDouble(-1) == 1:
-            odo_ll_botpose = self.odo_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0,
-                                                                                               0.0, 0.0, 0.0, 0.0,
-                                                                                               0.0, 0.0, 0.0, 0.0])
-
-            if (odo_ll_botpose[9] < 5 and odo_ll_botpose[7] >= 1 and
-                    0 < odo_ll_botpose[0] < 16.7 and 0 < odo_ll_botpose[1] < 6):
-                # SmartDashboard.putBoolean("Valid AprilTag Detected?", True)
-                self.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]),
-                                                   Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
-                                            utils.get_current_time_seconds() - (odo_ll_botpose[6] / 1000.0),
-                                            (0.2, 0.2, 999999999))
-        # else:
-            # SmartDashboard.putBoolean("Valid AprilTag Detected?", False)
-        if self.gp_ll_table.getEntry("tv").getDouble(-1) == 1:
-            self.tx = self.gp_ll_table.getEntry("tx").getDouble(0)
-            # self.add_gp_to_detected_list(self.estimate_gp_location())
-            # SmartDashboard.putString("GP Locations", str(self.gp_locations))
-        # else:
-        #     self.remove_gp_from_detected_list()
-            # SmartDashboard.putString("GP Locations", str(self.gp_locations))
-
-    # def estimate_gp_location(self) -> [float, float, float]:
-    #     h = (self.gp_ll_table.getEntry("ta").getDouble(0) * 0.01 * 788.644 + 1.692) * 0.0254  # 1 replaced with empirical ratio
-    #     y = h * math.sin(self.get_pose().rotation().radians())
-    #     x = h * math.cos(self.get_pose().rotation().radians())
-    # 
-    #     return [self.get_pose().x + x, self.get_pose().y + y, self.get_pose().rotation().degrees(),
-    #             utils.get_current_time_seconds()]
-    #
-    # def add_gp_to_detected_list(self, gp: [float, float, float, float]) -> None:
-    #     if self.gp_locations:
-    #         for x in self.gp_locations:
-    #             if gp[0] - 0.5 < x[0] < gp[0] + 0.5 and gp[1] - 0.5 < x[1] < gp[1] + 0.5:
-    #                 x[0] = gp[0]
-    #                 x[1] = gp[1]
-    #                 x[2] = gp[2]
-    #                 x[3] = gp[3]
-    #             else:
-    #                 self.gp_locations.append([gp[0], gp[1], gp[2], gp[3]])
-    #     else:
-    #         self.gp_locations.append([gp[0], gp[1], gp[2], gp[3]])
-    #     # self.display_gps_as_poses()
-    #
-    # def remove_gp_from_detected_list(self):
-    #     for x in self.gp_locations:
-    #         if (self.get_pose().rotation().degrees() - 2 < x[2] < self.get_pose().rotation().degrees() + 2 or
-    #                 x[3] < utils.get_current_time_seconds() - 5):
-    #             self.gp_locations.remove(x)
-    #             self.display_gps_as_poses()
-    #
-    # def display_gps_as_poses(self):
-    #     for i in range(0, len(self.gp_locations)):
-    #         self.gp_field.getObject("gp" + str(i)).setPose(Pose2d(self.gp_locations[i][0], self.gp_locations[i][1], 0))
-    #     SmartDashboard.putData(self.gp_field)
 
     def get_field_relative_velocity(self) -> [float, float, float]:
         """Returns the instantaneous velocity of the robot."""
@@ -601,9 +553,28 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         return [x_slip, y_slip]
 
     def reset_odometry(self):
+        """Reset robot odometry at the Subwoofer."""
         if DriverStation.getAlliance() == DriverStation.Alliance.kRed:
             self.reset_pose(Pose2d(15.19, 5.55, Rotation2d.fromDegrees(180)))
             self.set_operator_perspective_forward(Rotation2d.fromDegrees(180))
         else:
             self.reset_pose(Pose2d(1.5, 5.55, Rotation2d.fromDegrees(0)))
             self.set_operator_perspective_forward(Rotation2d.fromDegrees(0))
+
+    def reset_clt(self) -> None:
+        self.re_entered_clt = True
+
+    def drive_clt(self, x_speed: float, y_speed: float, turn_amount: float) -> swerve.requests:
+        if self.re_entered_clt:
+            if DriverStation.getAlliance() == DriverStation.Alliance.kRed:
+                self.target_direction = Rotation2d.fromDegrees(self.get_pose().rotation().degrees() + 180)
+            else:
+                self.target_direction = self.get_pose().rotation()
+            self.re_entered_clt = False
+        else:
+            self.target_direction = Rotation2d(self.target_direction.radians() + turn_amount * degreesToRadians(2))
+
+        return (self.clt_request
+                .with_velocity_x(x_speed)
+                .with_velocity_y(y_speed)
+                .with_target_direction(self.target_direction))

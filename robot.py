@@ -37,7 +37,7 @@ class Robot(TimedCommandRobot):
 
     def autonomousInit(self) -> None:
         """Run the auto scheduler if the command was actually input. For the most part, this is a safety call."""
-        self.m_autonomous_command = self.m_robotcontainer.getAutonomousCommand()
+        self.m_autonomous_command = self.m_robotcontainer.get_autonomous_command()
 
         if self.m_autonomous_command is not None:
             self.m_autonomous_command.schedule()

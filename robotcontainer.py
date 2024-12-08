@@ -8,15 +8,14 @@ from subsystems.ledsubsystem import LEDs
 from subsystems.armsubsystem import ArmSubsystem
 from subsystems.utilsubsystem import UtilSubsystem
 from wpilib import SmartDashboard, SendableChooser, DriverStation, DataLogManager, Timer, Alert
-# from helpers.custom_hid import CustomHID
 from pathplannerlib.auto import NamedCommands, PathPlannerAuto
 from wpinet import PortForwarder
 
 from generated.tuner_constants import TunerConstants
 from telemetry import Telemetry
 
-from phoenix6 import swerve, utils, SignalLogger
-from wpimath.geometry import Pose2d, Rotation2d
+from phoenix6 import swerve, SignalLogger
+from wpimath.geometry import Rotation2d
 from wpimath.units import rotationsToRadians
 
 from math import pi
@@ -25,7 +24,6 @@ from commands.baseline import Baseline
 from commands.check_drivetrain import CheckDrivetrain
 from commands.alignment_leds import AlignmentLEDs
 from commands.drive_to_gamepiece import DriveToGamePiece
-from commands.auto_alignment_leds import AutoAlignmentLEDs
 from commands.profiled_target import ProfiledTarget
 from commands.auto_alignment_auto_select import AutoAlignmentAutoSelect
 
@@ -128,8 +126,8 @@ class RobotContainer:
 
         # Setup for all event-trigger commands. ------------------------------------------------------------------------
         # self.configureTriggersDefault()
-        # self.configureTestBindings()
-        self.configureTriggersRewrite()
+        self.configure_test_bindings()
+        self.configure_triggers_rewrite()
 
         # Setup autonomous selector on the dashboard. ------------------------------------------------------------------
         self.m_chooser = SendableChooser()
@@ -139,7 +137,7 @@ class RobotContainer:
             self.m_chooser.addOption(x, x)
         SmartDashboard.putData("Auto Select", self.m_chooser)
 
-    def configureTriggersRewrite(self) -> None:
+    def configure_triggers_rewrite(self) -> None:
         self.drivetrain.setDefaultCommand(  # Drivetrain will execute this command periodically
             self.drivetrain.apply_request(
                 lambda: (
@@ -147,6 +145,22 @@ class RobotContainer:
                         -self.driver_controller.getLeftY() * self._max_speed)
                     .with_velocity_y(-self.driver_controller.getLeftX() * self._max_speed)
                     .with_rotational_rate(-self.driver_controller.getRightX() * self._max_angular_rate)
+                )
+            )
+        )
+
+        # Closed loop turning on command implementation.
+        self.driver_controller.leftBumper().and_(lambda: not self.test_bindings).onTrue(
+            SequentialCommandGroup(
+                runOnce(lambda: self.drivetrain.reset_clt(), self.drivetrain),
+                self.drivetrain.apply_request(
+                    lambda: (
+                        self.drivetrain.drive_clt(
+                            self.driver_controller.getLeftY() * self._max_speed * -1,
+                            self.driver_controller.getLeftX() * self._max_speed * -1,
+                            self.driver_controller.getRightX() * -1
+                        )
+                    )
                 )
             )
         )
@@ -188,6 +202,7 @@ class RobotContainer:
             runOnce(lambda: self.arm.set_state("stow"), self.arm)
         )
 
+        # Cycle through scoring set points.
         self.driver_controller.povLeft().and_(lambda: not self.test_bindings).onTrue(
             runOnce(lambda: self.util.cycle_scoring_setpoints(1), self.util).ignoringDisable(True)
         )
@@ -214,188 +229,25 @@ class RobotContainer:
             ).ignoringDisable(True)
         )
 
+        # Servo Testing
+        self.driver_controller.x().onTrue(
+            runOnce(lambda: self.arm.set_servo(1), self.arm)
+        ).onFalse(
+            runOnce(lambda: self.arm.set_servo(0), self.arm)
+        )
+
         # Configuration for telemetry.
         self.drivetrain.register_telemetry(
             lambda state: self._logger.telemeterize(state)
         )
 
     def configureTriggersDefault(self) -> None:
-        """Used to set up any commands that trigger when a measured event occurs."""
-        # Note that X is defined as forward according to WPILib convention,
-        # and Y is defined as to the left according to WPILib convention.
-        self.drivetrain.setDefaultCommand(  # Drivetrain will execute this command periodically
-            self.drivetrain.apply_request(
-                lambda: (
-                    self._drive.with_velocity_x(
-                        -self.driver_controller.slew_axis("LY", 0.05) * self._max_speed)
-                    .with_velocity_y(-self.driver_controller.slew_axis("LX", 0.01) * self._max_speed)
-                    .with_rotational_rate(-self.driver_controller.get_axis("RY", 0.01) * self._max_angular_rate)
-                )
-            )
-        )
-
-        # Slow Mode
-        # button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1)).whileTrue(
-        #     self.drivetrain.apply_request(
-        #         lambda: (
-        #             self._drive.with_velocity_x(
-        #                 -self.driver_controller.get_axis("LY", 0.05) * self._max_speed *
-        #                 self.driver_controller.refine_trigger("R", 0.1, 0.9, 0.5))
-        #             .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) *
-        #                              self._max_speed * self.driver_controller.refine_trigger("R",
-        #                                                                                      0.1,
-        #                                                                                      0.9,
-        #                                                                                      0.5))
-        #             .with_rotational_rate(-self.driver_controller.get_axis("RY", 0.05) *
-        #                                   self._max_angular_rate * self.driver_controller.refine_trigger("R",
-        #                                                                                                  0.1,
-        #                                                                                                  0.9,
-        #                                                                                                  0.5))
-        #         )
-        #     )
-        # )
-
-        # Brake
-        # button.Trigger(lambda: self.driver_controller.get_button("A") and not self.test_bindings).whileTrue(
-        #     self.drivetrain.apply_request(lambda: self._brake))
-
-        # Auto-alignment LEDs testing.
-        # button.Trigger(lambda: self.driver_controller.get_button("A") and not self.test_bindings).toggleOnTrue(
-        #     ParallelCommandGroup(
-        #         AlignmentLEDs(self.leds, self.drivetrain),
-        #         self.drivetrain.apply_request(
-        #             lambda: (
-        #                 self._hold_heading.with_velocity_x(
-        #                     -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
-        #                 .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
-        #                 .with_target_direction(Rotation2d.fromDegrees(180 +
-        #                                                               self.drivetrain.get_auto_lookahead_heading(
-        #                                                                   [16.5, 5.53], 0.3)))))))
-
-        # VIEW toggles on "snap heading" mode, where the driver can snap the right joystick in the direction they want
-        # the robot to face.
-        button.Trigger(lambda: self.driver_controller.get_button("MENU") and not self.test_bindings).toggleOnTrue(
-            SequentialCommandGroup(
-                runOnce(lambda: self.driver_controller.set_start_direction(
-                    self.drivetrain.get_pose().rotation().degrees()), self.drivetrain),
-                self.drivetrain.apply_request(
-                    lambda: (
-                        self._hold_heading.with_velocity_x(
-                            -self.driver_controller.get_axis("LY", 0.05) * self._max_speed)
-                        .with_velocity_y(-self.driver_controller.get_axis("LX", 0.05) * self._max_speed)
-                        .with_target_direction(Rotation2d.fromDegrees(self.driver_controller.dir_est_ctrl("R")))))))
-
-        # Arm manual controls.
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("N") and not self.test_bindings).whileTrue(
-            run(lambda: self.arm.set_voltage_direct(1), self.arm)).onFalse(
-            run(lambda: self.arm.set_voltage_direct(0), self.arm))
-        button.Trigger(lambda: self.driver_controller.get_d_pad_pull("S") and not self.test_bindings).whileTrue(
-            run(lambda: self.arm.set_voltage_direct(-1), self.arm)).onFalse(
-            run(lambda: self.arm.set_voltage_direct(0), self.arm))
-
-        # Cube acquired light
-        # button.Trigger(lambda: self.arm.get_sensor_on() and DriverStation.isTeleop()).onTrue(
-        #     SequentialCommandGroup(
-        #         runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
-        #         runOnce(lambda: self.leds.set_flash_color_color([0, 255, 0]), self.leds),
-        #         runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
-        #         WaitCommand(2),
-        #         runOnce(lambda: self.leds.set_state("gp_held"), self.leds)
-        #     ).ignoringDisable(True)
-        # ).onFalse(
-        #     SequentialCommandGroup(
-        #         runOnce(lambda: self.leds.set_flash_color_rate(10), self.leds),
-        #         runOnce(lambda: self.leds.set_flash_color_color([255, 0, 0]), self.leds),
-        #         runOnce(lambda: self.leds.set_state("flash_color"), self.leds),
-        #         WaitCommand(0.5),
-        #         runOnce(lambda: self.leds.set_state("default"), self.leds)
-        #     ).ignoringDisable(True)
-        # )
-
-        # Drive to game piece
-        # button.Trigger(lambda: self.driver_controller.get_trigger("L", 0.1)).whileTrue(
-        #     DriveToGamePiece(self.drivetrain, self.arm, self.driver_controller))
-
-        # Vibrate the controller when a game piece is in view
-        # button.Trigger(lambda: self.drivetrain.get_gp_in_view()).onTrue(
-        #     runOnce(lambda: self.driver_controller.set_rumble(1)).ignoringDisable(False)).onFalse(
-        #     runOnce(lambda: self.driver_controller.set_rumble(0)).ignoringDisable(True))
-
-        # Match time notifications
-        # button.Trigger(lambda: DriverStation.getMatchTime() <= 20).onTrue(
-        #     runOnce(lambda: self.leds.set_notifier((0, 255, 0)), self.leds)
-        # )
-        # button.Trigger(lambda: DriverStation.getMatchTime() <= 10).onTrue(
-        #     runOnce(lambda: self.leds.set_notifier((255, 255, 0)), self.leds)
-        # )
-        # button.Trigger(lambda: DriverStation.getMatchTime() <= 5).onTrue(
-        #     runOnce(lambda: self.leds.set_notifier((255, 0, 0)), self.leds)
-        # )
-        # button.Trigger(lambda: DriverStation.getMatchTime() <= 0.01).onTrue(
-        #     runOnce(lambda: self.leds.set_notifier([-1, -1, -1]), self.leds).ignoringDisable(True)
-        # )
-
-        # Reset heading and position when at the subwoofer by pressing "Y".
-        # button.Trigger(lambda: self.driver_controller.get_button("Y") and not self.test_bindings and
-        #                DriverStation.getAlliance() == DriverStation.Alliance.kRed).onTrue(
-        #     SequentialCommandGroup(
-        #         runOnce(lambda: self.drivetrain.reset_pose(Pose2d(15.19, 5.55, Rotation2d.fromDegrees(180))),
-        #                 self.drivetrain),
-        #         runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(180)))
-        #     ))
-        # button.Trigger(lambda: self.driver_controller.get_button("Y") and not self.test_bindings and
-        #                DriverStation.getAlliance() == DriverStation.Alliance.kBlue).onTrue(
-        #     SequentialCommandGroup(
-        #         runOnce(lambda: self.drivetrain.reset_pose(Pose2d(1.5, 5.55, Rotation2d.fromDegrees(0))),
-        #                 self.drivetrain),
-        #         runOnce(lambda: self.drivetrain.set_operator_perspective_forward(Rotation2d.fromDegrees(0)))
-        #     ))
-
-        # Scoring grid alignment
-        # (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
-        #     .whileTrue(
-        #     GridAligned(self.drivetrain, self.util, self.arm, 8.29, 90.0001, True, self.driver_controller)
-        # ))
-
-        (button.Trigger(lambda: self.driver_controller.get_trigger("R", 0.1) and not self.test_bindings)
-         .whileTrue(
-            AutoAlignmentAutoSelect(self.drivetrain, self.util, self.arm, True, self.driver_controller)
-        ))
-
-        # Shoot over the non-intake side
-        button.Trigger(lambda: self.driver_controller.get_button("LB") and not self.test_bindings).onTrue(
-            runOnce(lambda: self.arm.set_state("reverse_shoot"), self.arm)
-        ).onFalse(
-            runOnce(lambda: self.arm.set_state("stow"), self.arm)
-        )
-
-        # Use a profiled PID controller to target a location on the field.
-        button.Trigger(lambda: self.driver_controller.get_button("B") and not self.test_bindings).whileTrue(
-            ParallelCommandGroup(
-                AlignmentLEDs(self.leds, self.drivetrain),
-                ProfiledTarget(self.drivetrain, self.arm, [16.5, 5.53])
-        ))
-
+        print("Keeping this around for just a minute while i decide if there's a better way to do this.")
         # Activate autonomous misalignment lights.
         # button.Trigger(lambda: SmartDashboard.getBoolean("Misalignment Indicator Active?", False)).whileTrue(
         #     AutoAlignmentLEDs(self.drivetrain, self.leds, self.m_auto_start_location)
         #     .ignoringDisable(True)
         # )
-
-        # Grid Scoring Controls
-        button.Trigger(lambda: self.operator_controller.get_d_pad_pull("N")).onTrue(
-            runOnce(lambda: self.util.cycle_scoring_setpoints(1), self.util).ignoringDisable(True)
-        )
-        button.Trigger(lambda: self.operator_controller.get_d_pad_pull("S")).onTrue(
-            runOnce(lambda: self.util.cycle_scoring_setpoints(-1), self.util).ignoringDisable(True)
-        )
-
-        # Servo Testing
-        button.Trigger(lambda: self.driver_controller.get_button("X")).onTrue(
-            runOnce(lambda: self.arm.set_servo(1), self.arm)
-        ).onFalse(
-            runOnce(lambda: self.arm.set_servo(0), self.arm)
-        )
 
         # button.Trigger(lambda: SmartDashboard.getBoolean("Logging Enabled?", False)).onTrue(
         #     SequentialCommandGroup(
@@ -411,13 +263,7 @@ class RobotContainer:
         #         runOnce(lambda: self.alert_logging_enabled.set(False))
         #     )
         # )
-
-        # Configuration for telemetry.
-        self.drivetrain.register_telemetry(
-            lambda state: self._logger.telemeterize(state)
-        )
-
-    def getAutonomousCommand(self) -> Command:
+    def get_autonomous_command(self) -> Command:
         """Use this to pass the autonomous command to the main Robot class.
         Returns the command to run in autonomous
         """
@@ -440,72 +286,40 @@ class RobotContainer:
                         selected_auto = None
             return selected_auto
 
-    def configureTestBindings(self) -> None:
-        self.configureSYSID()
+    def configure_test_bindings(self) -> None:
+        self.configure_sys_id()
 
         # Point all modules in a direction
-        button.Trigger(lambda: self.driver_controller.get_button("MENU") and self.test_bindings) \
-            .whileTrue(self.drivetrain.apply_request(
+        self.driver_controller.start().and_(lambda: self.test_bindings).whileTrue(self.drivetrain.apply_request(
                 lambda: self._point.with_module_direction(
-                    Rotation2d(-self.driver_controller.get_axis("LY", 0.05),
-                               -self.driver_controller.get_axis("LX", 0.05)))
-            ))
+                    Rotation2d(-1 * self.driver_controller.getLeftY()
+                               -1 * self.driver_controller.getLeftX()))))
 
-    def configureSYSID(self) -> None:
-        # Run Quasistatic Translational test.
-        button.Trigger(lambda: self.driver_controller.get_button("Y") and
-                       self.test_bindings and
-                       self.driver_controller.get_trigger("R", 0.5)).whileTrue(
-            self.drivetrain.sys_id_translation_quasistatic(sysid.SysIdRoutine.Direction.kForward))
-        button.Trigger(lambda: self.driver_controller.get_button("B") and
-                       self.test_bindings and
-                       self.driver_controller.get_trigger("R", 0.5)).whileTrue(
-            self.drivetrain.sys_id_translation_quasistatic(sysid.SysIdRoutine.Direction.kReverse))
-        # Run Dynamic Translational test.
-        button.Trigger(lambda: self.driver_controller.get_button("A") and
-                       self.test_bindings and
-                       self.driver_controller.get_trigger("R", 0.5)).whileTrue(
-            self.drivetrain.sys_id_translation_dynamic(sysid.SysIdRoutine.Direction.kForward))
-        button.Trigger(lambda: self.driver_controller.get_button("X") and
-                       self.test_bindings and
-                       self.driver_controller.get_trigger("R", 0.5)).whileTrue(
-            self.drivetrain.sys_id_translation_dynamic(sysid.SysIdRoutine.Direction.kReverse))
-        # Run Quasistatic Rotational test.
-        button.Trigger(lambda: self.driver_controller.get_button("Y") and
-                       self.test_bindings and
-                       self.driver_controller.get_button("RB")).whileTrue(
-            self.drivetrain.sys_id_rotation_quasistatic(sysid.SysIdRoutine.Direction.kForward))
-        button.Trigger(lambda: self.driver_controller.get_button("B") and
-                       self.test_bindings and
-                       self.driver_controller.get_button("RB")).whileTrue(
-            self.drivetrain.sys_id_rotation_quasistatic(sysid.SysIdRoutine.Direction.kReverse))
-        # Run Dynamic Translational test.
-        button.Trigger(lambda: self.driver_controller.get_button("A") and
-                       self.test_bindings and
-                       self.driver_controller.get_button("RB")).whileTrue(
-            self.drivetrain.sys_id_rotation_dynamic(sysid.SysIdRoutine.Direction.kForward))
-        button.Trigger(lambda: self.driver_controller.get_button("X") and
-                       self.test_bindings and
-                       self.driver_controller.get_button("RB")).whileTrue(
-            self.drivetrain.sys_id_rotation_dynamic(sysid.SysIdRoutine.Direction.kReverse))
-        # Run Quasistatic Steer test.
-        button.Trigger(lambda: self.driver_controller.get_button("Y") and
-                       self.test_bindings and
-                       self.driver_controller.get_button("LB")).whileTrue(
-            self.drivetrain.sys_id_steer_quasistatic(sysid.SysIdRoutine.Direction.kForward))
-        button.Trigger(lambda: self.driver_controller.get_button("B") and
-                       self.test_bindings and
-                       self.driver_controller.get_button("LB")).whileTrue(
-            self.drivetrain.sys_id_steer_quasistatic(sysid.SysIdRoutine.Direction.kReverse))
-        # Run Dynamic Translational test.
-        button.Trigger(lambda: self.driver_controller.get_button("A") and
-                       self.test_bindings and
-                       self.driver_controller.get_button("LB")).whileTrue(
-            self.drivetrain.sys_id_steer_dynamic(sysid.SysIdRoutine.Direction.kForward))
-        button.Trigger(lambda: self.driver_controller.get_button("X") and
-                       self.test_bindings and
-                       self.driver_controller.get_button("LB")).whileTrue(
-            self.drivetrain.sys_id_steer_dynamic(sysid.SysIdRoutine.Direction.kReverse))
+    def configure_sys_id(self) -> None:
+        (self.driver_controller.y().and_(lambda: self.test_bindings).and_(self.driver_controller.rightTrigger())
+         .whileTrue(self.drivetrain.sys_id_translation_quasistatic(sysid.SysIdRoutine.Direction.kForward)))
+        (self.driver_controller.b().and_(lambda: self.test_bindings).and_(self.driver_controller.rightTrigger())
+         .whileTrue(self.drivetrain.sys_id_translation_quasistatic(sysid.SysIdRoutine.Direction.kReverse)))
+        (self.driver_controller.a().and_(lambda: self.test_bindings).and_(self.driver_controller.rightTrigger())
+         .whileTrue(self.drivetrain.sys_id_translation_dynamic(sysid.SysIdRoutine.Direction.kForward)))
+        (self.driver_controller.x().and_(lambda: self.test_bindings).and_(self.driver_controller.rightTrigger())
+         .whileTrue(self.drivetrain.sys_id_translation_dynamic(sysid.SysIdRoutine.Direction.kReverse)))
+        (self.driver_controller.y().and_(lambda: self.test_bindings).and_(self.driver_controller.rightBumper())
+         .whileTrue(self.drivetrain.sys_id_rotation_quasistatic(sysid.SysIdRoutine.Direction.kForward)))
+        (self.driver_controller.b().and_(lambda: self.test_bindings).and_(self.driver_controller.rightBumper())
+         .whileTrue(self.drivetrain.sys_id_rotation_quasistatic(sysid.SysIdRoutine.Direction.kReverse)))
+        (self.driver_controller.a().and_(lambda: self.test_bindings).and_(self.driver_controller.rightBumper())
+         .whileTrue(self.drivetrain.sys_id_rotation_dynamic(sysid.SysIdRoutine.Direction.kForward)))
+        (self.driver_controller.x().and_(lambda: self.test_bindings).and_(self.driver_controller.rightBumper())
+         .whileTrue(self.drivetrain.sys_id_rotation_dynamic(sysid.SysIdRoutine.Direction.kReverse)))
+        (self.driver_controller.y().and_(lambda: self.test_bindings).and_(self.driver_controller.leftBumper())
+         .whileTrue(self.drivetrain.sys_id_steer_quasistatic(sysid.SysIdRoutine.Direction.kForward)))
+        (self.driver_controller.b().and_(lambda: self.test_bindings).and_(self.driver_controller.leftBumper())
+         .whileTrue(self.drivetrain.sys_id_steer_quasistatic(sysid.SysIdRoutine.Direction.kReverse)))
+        (self.driver_controller.a().and_(lambda: self.test_bindings).and_(self.driver_controller.leftBumper())
+         .whileTrue(self.drivetrain.sys_id_steer_dynamic(sysid.SysIdRoutine.Direction.kForward)))
+        (self.driver_controller.x().and_(lambda: self.test_bindings).and_(self.driver_controller.leftBumper())
+         .whileTrue(self.drivetrain.sys_id_steer_dynamic(sysid.SysIdRoutine.Direction.kReverse)))
 
     def enable_test_bindings(self, enabled: bool) -> None:
         self.test_bindings = enabled
