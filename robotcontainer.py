@@ -26,6 +26,7 @@ from commands.alignment_leds import AlignmentLEDs
 from commands.drive_to_gamepiece import DriveToGamePiece
 from commands.profiled_target import ProfiledTarget
 from commands.auto_alignment_auto_select import AutoAlignmentAutoSelect
+from commands.auto_alignment_multi_feedback import AutoAlignmentMultiFeedback
 
 
 class RobotContainer:
@@ -63,6 +64,8 @@ class RobotContainer:
             for port in range(5800, 5810):
                 PortForwarder.getInstance().add(port+10, "10.39.40.12", port)
             self.alert_limelight.set(True)
+        else:
+            SignalLogger.stop()
 
         # Startup subsystems. ------------------------------------------------------------------------------------------
         self.leds = LEDs(self.timer)
@@ -138,32 +141,31 @@ class RobotContainer:
         SmartDashboard.putData("Auto Select", self.m_chooser)
 
     def configure_triggers_rewrite(self) -> None:
-        self.drivetrain.setDefaultCommand(  # Drivetrain will execute this command periodically
-            self.drivetrain.apply_request(
-                lambda: (
-                    self._drive.with_velocity_x(
-                        -self.driver_controller.getLeftY() * self._max_speed)
-                    .with_velocity_y(-self.driver_controller.getLeftX() * self._max_speed)
-                    .with_rotational_rate(-self.driver_controller.getRightX() * self._max_angular_rate)
-                )
-            )
-        )
+        # self.drivetrain.setDefaultCommand(  # Drivetrain will execute this command periodically
+        #     self.drivetrain.apply_request(
+        #         lambda: (
+        #             self._drive.with_velocity_x(
+        #                 -self.driver_controller.getLeftY() * self._max_speed)
+        #             .with_velocity_y(-self.driver_controller.getLeftX() * self._max_speed)
+        #             .with_rotational_rate(-self.driver_controller.getRightX() * self._max_angular_rate)
+        #         )
+        #     )
+        # )
 
-        # Closed loop turning on command implementation.
-        self.driver_controller.leftBumper().and_(lambda: not self.test_bindings).onTrue(
+        self.drivetrain.setDefaultCommand(
             SequentialCommandGroup(
-                runOnce(lambda: self.drivetrain.reset_clt(), self.drivetrain),
-                self.drivetrain.apply_request(
-                    lambda: (
-                        self.drivetrain.drive_clt(
-                            self.driver_controller.getLeftY() * self._max_speed * -1,
-                            self.driver_controller.getLeftX() * self._max_speed * -1,
-                            self.driver_controller.getRightX() * -1
+                    runOnce(lambda: self.drivetrain.reset_clt(), self.drivetrain),
+                    self.drivetrain.apply_request(
+                        lambda: (
+                            self.drivetrain.drive_clt(
+                                self.driver_controller.getLeftY() * self._max_speed * -1,
+                                self.driver_controller.getLeftX() * self._max_speed * -1,
+                                self.driver_controller.getRightX() * -1
+                            )
                         )
                     )
                 )
             )
-        )
 
         # Reset pose.
         self.driver_controller.y().and_(lambda: not self.test_bindings).onTrue(
@@ -185,8 +187,10 @@ class RobotContainer:
             run(lambda: self.arm.set_voltage_direct(0), self.arm))
 
         # Auto selecting auto alignment.
+        # self.driver_controller.rightTrigger().and_(lambda: not self.test_bindings).whileTrue(
+        #     AutoAlignmentAutoSelect(self.drivetrain, self.util, self.arm, True, self.driver_controller))
         self.driver_controller.rightTrigger().and_(lambda: not self.test_bindings).whileTrue(
-            AutoAlignmentAutoSelect(self.drivetrain, self.util, self.arm, True, self.driver_controller))
+            AutoAlignmentMultiFeedback(self.drivetrain, self.util, self.arm, True, self.driver_controller))
 
         # Shoot over the non-intake side
         self.driver_controller.rightBumper().and_(lambda: not self.test_bindings).onTrue(

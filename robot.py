@@ -22,11 +22,23 @@ class Robot(TimedCommandRobot):
         """Set the constant robot periodic state (in command based, that's just run the scheduler loop)"""
         CommandScheduler.getInstance().run()
         self.odo_ll_table.putNumberArray("robot_orientation_set",
-                                         [self.m_robotcontainer.drivetrain.get_pose().rotation().degrees(), 0, 0, 0, 0, 0])
-        odo_ll_botpose = self.odo_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+                                         [self.m_robotcontainer.drivetrain.get_pose().rotation().degrees(), 0, 0,
+                                          0, 0, 0])
+        odo_ll_botpose = self.odo_ll_table.getEntry("botpose_orb_wpiblue").getDoubleArray([0.0, 0.0, 0.0, 0.0, 0.0,
+                                                                                           0.0, 0.0, 0.0, 0.0, 0.0,
+                                                                                           0.0, 0.0])
+        self.m_robotcontainer.drivetrain.target_lateral_offset = self.odo_ll_table.getNumber("tx", -1)
+        self.m_robotcontainer.drivetrain.visible_tag = self.odo_ll_table.getNumber("tid", -1)
         if (odo_ll_botpose[9] < 5 and odo_ll_botpose[7] >= 1 and
                 0 < odo_ll_botpose[0] < 16.7 and 0 < odo_ll_botpose[1] < 6):
-            self.m_robotcontainer.drivetrain.add_vision_measurement(Pose2d(Translation2d(odo_ll_botpose[0], odo_ll_botpose[1]), Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)), utils.get_current_time_seconds() - (odo_ll_botpose[6] / 1000.0), (0.2, 0.2, 999999999))
+            self.m_robotcontainer.drivetrain.add_vision_measurement(
+                Pose2d(
+                    Translation2d(
+                        odo_ll_botpose[0],
+                        odo_ll_botpose[1]),
+                    Rotation2d.fromDegrees((odo_ll_botpose[5] + 360) % 360)),
+                utils.get_current_time_seconds() - (odo_ll_botpose[6] / 1000.0),
+                (0.2, 0.2, 999999999))
 
     def disabledInit(self) -> None:
         """Nothing is written here yet. Probably will not modify unless something is required for end-of-match."""
