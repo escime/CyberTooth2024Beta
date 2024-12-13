@@ -24,15 +24,16 @@ class UtilSubsystem(Subsystem):
             self.grid.append(grid_row)
 
         self.scoring_location = 0
+        # FORMAT: X, Y, ANGLE, LOCATION NAME, APRILTAG FOR SERVOING
         self.scoring_locations_red = [
-            [13.259, 4.111, 180.001, "Red Podium"],
-            [10.929, 5.364, 120, "Red Amp"],
-            [10.929, 2.8, 60, "Red Source"]
+            [13.259, 4.111, 180.001, "Red Podium", 1],
+            [10.929, 5.364, 120, "Red Amp", 2],
+            [10.929, 2.8, 60, "Red Source", 3]
         ]
         self.scoring_locations_blue = [
-            [16.5 - self.scoring_locations_red[0][0], 4.111, 0.001, "Blue Podium"],
-            [16.5 - self.scoring_locations_red[2][0], 2.8, 300, "Blue Source"],
-            [16.5 - self.scoring_locations_red[1][0], 5.364, 240, "Blue Amp"]
+            [16.5 - self.scoring_locations_red[0][0], 4.111, 0.001, "Blue Podium", 4],
+            [16.5 - self.scoring_locations_red[2][0], 2.8, 300, "Blue Source", 5],
+            [16.5 - self.scoring_locations_red[1][0], 5.364, 240, "Blue Amp", 6]
         ]
 
         self.scoring_setpoint = 0

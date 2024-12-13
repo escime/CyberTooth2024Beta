@@ -150,12 +150,8 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         if utils.is_simulation():
             self._start_sim_thread()
 
-        self.odo_ll_table = NetworkTableInstance.getDefault().getTable("limelight")
-        self.gp_ll_table = NetworkTableInstance.getDefault().getTable("limelight-gp")
-        self.gp_ll_gp_mode = True
-        self.tx = 0.0
-        self.gp_locations = []
-        self.gp_field = Field2d()
+        self.target_lateral_offset = -1
+        self.visible_tag = -1
 
         self.pathplanner_rotation_overridden = False
         self.configure_pathplanner()
@@ -191,7 +187,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
         )
         self.clt_request.heading_controller.setPID(5, 0, 0)
         self.clt_request.heading_controller.enableContinuousInput(0, -2 * math.pi)
-        self.clt_request.heading_controller.setTolerance(0.05)
+        self.clt_request.heading_controller.setTolerance(0.1)
         self.re_entered_clt = True
         self.target_direction = Rotation2d(0)
 
@@ -309,9 +305,6 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                     else self._BLUE_ALLIANCE_PERSPECTIVE_ROTATION
                 )
                 self._has_applied_operator_perspective = True
-
-        # Configure limelight settings and data transfer.
-        # self.limelight_periodic()
 
         # Update robot velocity and acceleration.
         if self.lookahead_active:
@@ -572,7 +565,7 @@ class CommandSwerveDrivetrain(Subsystem, swerve.SwerveDrivetrain):
                 self.target_direction = self.get_pose().rotation()
             self.re_entered_clt = False
         else:
-            self.target_direction = Rotation2d(self.target_direction.radians() + turn_amount * degreesToRadians(2))
+            self.target_direction = Rotation2d(self.target_direction.radians() + turn_amount * degreesToRadians(4))
 
         return (self.clt_request
                 .with_velocity_x(x_speed)
